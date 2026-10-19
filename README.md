@@ -1,5 +1,9 @@
 # notify-bot
 
+[English](README.en.md) | 简体中文
+
+[![Offline tests](https://github.com/kevinlove0712/notify-bot/actions/workflows/test.yml/badge.svg?branch=main)](https://github.com/kevinlove0712/notify-bot/actions/workflows/test.yml)
+
 让 Agent 或命令行通过飞书、企业微信群机器人发送通知。按平台管理多个命名群，一次调用可向多个目标发送文本或 Markdown。
 
 Node.js / Python 双实现，无需安装第三方运行依赖。两版通过 HTTPS 发送，接受相同的 CLI 参数，共用独立配置文件。
@@ -20,9 +24,11 @@ Node.js / Python 双实现，无需安装第三方运行依赖。两版通过 HT
 克隆仓库，或下载源码并解压为 `notify-bot` 目录。无需 `npm install` 或 `pip install`：
 
 ```bash
-git clone https://github.com/kevinlove0712/notify-bot.git
+git clone --branch v0.1.0 --depth 1 https://github.com/kevinlove0712/notify-bot.git
 cd notify-bot
 ```
+
+上述命令固定使用 `v0.1.0`；也可从 [Releases](https://github.com/kevinlove0712/notify-bot/releases) 下载对应版本源码。要跟随开发分支，克隆时省略 `--branch v0.1.0 --depth 1`。
 
 在仓库根目录选择一个运行时：
 
@@ -105,7 +111,8 @@ node scripts/notify-send.js --target feishu:工作群 --target wecom:工作群 t
 | [CLI 参考](references/cli-reference.md) | 按需查阅：参数、格式限制、退出码、TLS 与重试 |
 | [curl 示例](examples/curl/README.md) | 手工联调：直接 HTTPS 请求、签名和响应判断 |
 | [贡献说明](CONTRIBUTING.md) | 开发者：离线测试、两版对齐、提交流程 |
-| [变更记录](CHANGELOG.md) | 待发布内容与后续版本变更 |
+| [变更记录](CHANGELOG.md) | 已发布版本与后续版本变更 |
+| [安全说明](SECURITY.md) | 安全问题私密报告、凭证保护与泄露处理 |
 
 ## 测试
 
@@ -115,7 +122,11 @@ node scripts/notify-send.js --target feishu:工作群 --target wecom:工作群 t
 python3 tests/run_tests.py
 ```
 
-统一入口隔离用户配置、阻止测试进程的真实网络连接，运行 Node/Python CLI 对齐、模拟传输和安装包测试。无需 webhook、平台账号或第三方测试库。GitHub Actions 工作流覆盖 macOS/Linux 的不同运行时组合；工作流在首次上传并运行后才能验证云端结果。
+统一入口隔离用户配置、阻止测试进程的真实网络连接，运行 Node/Python CLI 对齐、模拟传输和安装包测试。无需 webhook、平台账号或第三方测试库。GitHub Actions 使用同一测试入口，覆盖 Linux 的 Node 18 / Python 3.10、Node 22 / Python 3.12、Node 24 / Python 3.14，以及 macOS 的 Node 24 / Python 3.13。运行结果见上方 CI 徽章或 [Actions](https://github.com/kevinlove0712/notify-bot/actions/workflows/test.yml)。
+
+## 安全问题
+
+发现漏洞请通过 [Security → Report a vulnerability](https://github.com/kevinlove0712/notify-bot/security/advisories) 私密报告，不要在公开 Issue 中贴 webhook、密钥或未修复漏洞的利用细节。报告要求与凭证泄露处理见 [SECURITY.md](SECURITY.md)。普通功能问题仍可提交 Issue，附脱敏后的复现信息。
 
 ## 许可证
 

@@ -1,8 +1,8 @@
 # Changelog
 
-## Unreleased
+## [v0.1.0](https://github.com/kevinlove0712/notify-bot/releases/tag/v0.1.0) — 2026-10-19
 
-首次开源准备版，尚未发布版本标签。
+首个公开版本 / First public release.
 
 - Node.js / Python 独立实现，零必需第三方运行依赖。
 - 飞书与企业微信按平台分组的多目标配置及命名路由。
@@ -11,3 +11,4 @@
 - 分离 Agent 指令、使用指南、CLI 参考和开发说明。
 - 增加占位配置、隔离安装测试、离线测试入口与 CI 工作流。
 - 增加飞书 / 企微 curl 文本示例与离线回归；复用命名配置和签名校验，清晰区分 curl 与主 CLI 的结果语义。
+- 补充简短英文 README、安全报告政策、私密漏洞报告入口和按版本安装说明。
