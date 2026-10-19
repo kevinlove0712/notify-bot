@@ -1,0 +1,32 @@
+# Local credentials; keep the public example.
+.env
+.env.*
+!.env.example
+config.json
+config.*.json
+!config.example.json
+bots.json
+*.local.json
+secrets/
+
+# Local artifacts and backups.
+__pycache__/
+*.py[cod]
+.DS_Store
+Thumbs.db
+node_modules/
+.venv/
+venv/
+*.log
+*.bak
+*.zip
+*.tar.gz
+dist/
+work/
+
+# Editor-local project metadata.
+.idea/
+.vscode/
+*.iml
+*.ipr
+*.iws

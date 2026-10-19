@@ -1,0 +1,643 @@
+#!/usr/bin/env python3
+"""飞书/企业微信群机器人 webhook 发送 CLI（Python 3 标准库，零依赖）。"""
+
+import base64
+import hashlib
+import hmac
+import json
+import os
+import re
+import secrets
+import ssl
+import sys
+import time
+import urllib.error
+import urllib.parse
+import urllib.request
+import http.client
+from types import SimpleNamespace
+
+KIB = 1024
+MIB = 1024 * KIB
+FEISHU_MAX_BODY = 20 * KIB
+WECOM_TEXT_MAX = 2048
+WECOM_MD_MAX = 4096
+WECOM_IMAGE_MAX = 2 * MIB
+WECOM_FILE_MAX = 20 * MIB
+WECOM_VOICE_MAX = 2 * MIB
+FEISHU_COLORS = {"blue", "green", "grey", "orange", "red", "turquoise", "violet", "wathet"}
+
+FEISHU_ERR = {
+    19001: "webhook token 无效",
+    9499: "请求体格式错误或超 20 KiB",
+    19021: "签名不匹配或 timestamp 过期",
+    19022: "IP 不在白名单",
+    19024: "消息不含自定义关键词",
+    11232: "触发限流",
+    11227: "image_key 无效（飞书图片需先通过应用机器人上传）",
+    11246: "卡片包含无效 image_key",
+}
+
+
+class NotifyError(Exception):
+    def __init__(self, message, exit_code=2):
+        super().__init__(re.sub(r"https?://[^\s\"'<>]+", "[地址已隐藏]", message))
+        self.exit_code = exit_code
+
+
+def fail(message, exit_code=2):
+    raise NotifyError(message, exit_code)
+
+
+def env_value(key):
+    return os.environ.get(key, "")
+
+
+def read_text(file):
+    try:
+        if file == "-":
+            return sys.stdin.read()
+        with open(file, encoding="utf-8") as stream:
+            return stream.read()
+    except (OSError, UnicodeError):
+        fail("无法读取输入文件（路径及内容已隐藏）")
+
+
+def parse_json(text, label):
+    try:
+        return json.loads(text, parse_constant=lambda _: fail("JSON 不允许非有限数字"))
+    except (ValueError, RecursionError):
+        fail(f"JSON 解析失败：{label}（内容已隐藏）")
+
+
+def encode_payload(payload):
+    return json.dumps(payload, ensure_ascii=False, separators=(",", ":")).encode("utf-8")
+
+
+def read_config(file):
+    location = os.path.abspath(file)
+    try:
+        info = os.stat(location)
+        with open(location, encoding="utf-8") as stream:
+            source = stream.read()
+    except FileNotFoundError:
+        fail(f"配置文件不存在：{location}")
+    except (OSError, UnicodeError):
+        fail(f"无法读取配置文件：{location}")
+    if os.name == "posix" and info.st_mode & 0o077:
+        print("警告：配置文件包含组/其他用户权限，建议 chmod 600；脚本未修改权限", file=sys.stderr)
+    return parse_json(source, f"配置文件 {location}")
+
+
+def platform_message(result, url, secret=""):
+    message = result.get("msg") or result.get("errmsg")
+    if not isinstance(message, str) or not message.strip():
+        return ""
+    parsed = urllib.parse.urlparse(url)
+    token = (urllib.parse.parse_qs(parsed.query).get("key", [""])[0] if parsed.hostname == "qyapi.weixin.qq.com"
+             else parsed.path.rstrip("/").rsplit("/", 1)[-1])
+    for credential in (url, token, secret):
+        if credential:
+            for value in (credential, urllib.parse.quote(credential, safe="")):
+                message = message.replace(value, "[凭证已隐藏]")
+    message = re.sub(r"https?://[^\s\"'<>]+", "[地址已隐藏]", message)
+    message = re.sub(r"[\x00-\x1f\x7f]", " ", message)
+    return "；平台提示：" + message[:500]
+
+
+def resolve_targets(args):
+    if args.target or args.list_targets:
+        if args.url:
+            fail("--target/--list-targets 不能与 --url 混用")
+        file = args.config or env_value("NOTIFY_CONFIG_FILE") or os.path.expanduser("~/.config/notify-bot/config.json")
+        config = read_config(file)
+        if not isinstance(config, dict):
+            fail("配置需要按 feishu/wecom 分组的对象")
+        if "targets" in config:
+            fail("旧 targets 配置需要迁移为 feishu/wecom 分组")
+        catalog = []
+        for platform, group in config.items():
+            if platform not in ("feishu", "wecom") or not isinstance(group, dict):
+                fail("配置平台仅支持 feishu/wecom，且分组必须是对象")
+            for name, entry in group.items():
+                if not name.strip() or re.search(r"[:\x00-\x1f\x7f]", name) or not isinstance(entry, dict):
+                    fail("目标名称不能为空或含冒号/控制字符，目标配置必须是对象")
+                catalog.append({"name": name, "platform": platform, "entry": entry})
+        if args.list_targets:
+            return [{"name": target["name"], "platform": target["platform"]} for target in catalog
+                    if not args.platform or target["platform"] == args.platform]
+        targets = []
+        for selector in args.target:
+            name, platform = selector, args.platform
+            if ":" in selector:
+                qualified_platform, name = selector.split(":", 1)
+                if qualified_platform not in ("feishu", "wecom"):
+                    fail("目标前缀仅支持 feishu: 或 wecom:")
+                if platform and platform != qualified_platform:
+                    fail("--platform 与 --target 平台前缀不一致")
+                platform = qualified_platform
+            matches = [target for target in catalog if target["name"] == name
+                       and (not platform or target["platform"] == platform)]
+            if not matches:
+                fail("目标名称不存在，请使用 --list-targets 查看")
+            if len(matches) > 1:
+                fail("目标名称在多个平台存在，请指定 --platform 或使用 平台:名称")
+            selected = matches[0]
+            entry = selected["entry"]
+            if not isinstance(entry.get("url"), str):
+                fail("目标必须包含 url 字符串")
+            if detect_platform(entry["url"]) != selected["platform"]:
+                fail("目标 URL 与所在平台分组不匹配")
+            if "secret" in entry and not isinstance(entry["secret"], str):
+                fail("目标 secret 必须是字符串")
+            if selected["platform"] != "feishu" and entry.get("secret"):
+                fail("secret 仅飞书支持")
+            targets.append({"name": selected["name"], "platform": selected["platform"], "url": entry["url"],
+                            "secret": entry.get("secret", "")})
+        if len({webhook_identity(target["url"]) for target in targets}) != len(targets):
+            fail("重复目标或多个名称指向同一个 webhook，请只选择一个")
+        return targets
+    if args.config:
+        fail("--config 需要同时指定 --target 或 --list-targets")
+    specific = {"feishu": "FEISHU_WEBHOOK_URL", "wecom": "WECOM_WEBHOOK_URL"}.get(args.platform, "")
+    url = args.url or (env_value(specific) if specific else "") or env_value("NOTIFY_WEBHOOK_URL")
+    if not url and not (args.dry_run and args.platform):
+        fail("缺少 webhook；请使用 --target、--url 或配置环境变量")
+    platform = detect_platform(url) if url else args.platform
+    if args.platform and args.platform != platform:
+        fail("--platform 与 webhook 指向的平台不一致")
+    return [{"name": platform, "platform": platform, "url": url,
+             "secret": env_value("FEISHU_WEBHOOK_SECRET") if platform == "feishu" else ""}]
+
+
+def webhook_identity(url):
+    parsed = urllib.parse.urlparse(url)
+    if parsed.hostname == "qyapi.weixin.qq.com":
+        return "wecom:" + urllib.parse.parse_qs(parsed.query)["key"][0]
+    return "feishu:" + parsed.path.rstrip("/")
+
+
+def detect_platform(raw_url):
+    try:
+        parsed = urllib.parse.urlparse(raw_url)
+        if parsed.username or parsed.password or parsed.fragment or parsed.port not in (None, 443):
+            fail("webhook 不允许用户信息、片段或非标准端口（地址已隐藏）")
+    except ValueError:
+        fail("webhook 地址不是有效 URL（地址已隐藏）")
+    if parsed.scheme != "https":
+        fail("webhook 必须使用 HTTPS（地址已隐藏）")
+
+    if parsed.hostname == "open.feishu.cn" and re.fullmatch(r"/open-apis/bot/v2/hook/[^/]+/?", parsed.path):
+        return "feishu"
+    query = urllib.parse.parse_qs(parsed.query)
+    if (parsed.hostname == "qyapi.weixin.qq.com" and parsed.path == "/cgi-bin/webhook/send"
+            and query.get("key", [""])[0]):
+        return "wecom"
+    fail("webhook 域名或接口路径不受支持（地址已隐藏）")
+
+
+def load_json_arg(value):
+    value = str(value).strip()
+    inline = value.startswith(("{", "["))
+    label = "内联参数" if inline else "stdin" if value == "-" else os.path.basename(value)
+    result = parse_json(value if inline else read_text(value), label)
+    if not isinstance(result, dict):
+        fail("JSON 顶层必须是对象")
+    return result
+
+
+def byte_length(value):
+    return len(value.encode("utf-8"))
+
+
+def require_file(file_path):
+    try:
+        stat = os.stat(file_path)
+    except OSError:
+        fail(f"文件不存在：{file_path}")
+    if not os.path.isfile(file_path):
+        fail(f"不是普通文件：{file_path}")
+    return stat
+
+
+def validate_upload_file(command, file_path):
+    stat = require_file(file_path)
+    if stat.st_size <= 5:
+        fail("企微上传文件必须大于 5 字节")
+    maximum = WECOM_VOICE_MAX if command == "voice" else WECOM_FILE_MAX
+    if stat.st_size > maximum:
+        label = "语音" if command == "voice" else "文件"
+        fail(f"{label}超过 {maximum // MIB} MiB 限制")
+    if command == "voice":
+        with open(file_path, "rb") as stream:
+            header = stream.read(6)
+        if os.path.splitext(file_path)[1].lower() != ".amr" or header != b"#!AMR\n":
+            fail("企微语音仅支持带有效文件头的 AMR 文件")
+
+
+def read_wecom_image(file_path):
+    stat = require_file(file_path)
+    if stat.st_size == 0 or stat.st_size > WECOM_IMAGE_MAX:
+        fail("企微图片必须大于 0 且不超过 2 MiB")
+    with open(file_path, "rb") as file:
+        data = file.read()
+    is_png = data.startswith(bytes.fromhex("89504e470d0a1a0a"))
+    is_jpeg = data.startswith(bytes.fromhex("ffd8ff"))
+    if not is_png and not is_jpeg:
+        fail("企微图片仅支持 JPG 或 PNG")
+    return data
+
+
+def build_text(platform, args):
+    content = " ".join(args.positional)
+    if platform == "feishu":
+        text = content
+        if args.at_all:
+            text = '<at user_id="all">所有人</at> ' + text
+        for user_id in args.at or []:
+            if not re.fullmatch(r"[A-Za-z0-9_-]+", user_id):
+                fail(f"飞书用户 ID 格式无效：{user_id}")
+            text += f' <at user_id="{user_id}"></at>'
+        return {"msg_type": "text", "content": {"text": text}}
+
+    if byte_length(content) > WECOM_TEXT_MAX:
+        fail("企微文本正文超过 2048 字节")
+    text = {"content": content}
+    user_ids = list(args.at or [])
+    if args.at_all:
+        user_ids.append("@all")
+    if user_ids:
+        text["mentioned_list"] = user_ids
+    if args.at_mobile:
+        for mobile in args.at_mobile:
+            if not re.fullmatch(r"\+?[0-9]{5,20}", mobile):
+                fail(f"手机号格式无效：{mobile}")
+        text["mentioned_mobile_list"] = [*args.at_mobile] + (["@all"] if args.at_all else [])
+    return {"msgtype": "text", "text": text}
+
+
+def build_markdown(platform, args):
+    content = " ".join(args.positional)
+    if platform == "feishu":
+        if args.color and args.color not in FEISHU_COLORS:
+            fail(f"不支持的飞书卡片颜色：{args.color}")
+        card = {
+            "schema": "2.0",
+            "body": {
+                "direction": "vertical",
+                "padding": "12px 12px 12px 12px",
+                "elements": [{
+                    "tag": "markdown", "content": content, "text_align": "left",
+                    "text_size": "normal_v2", "margin": "0px 0px 8px 0px",
+                }],
+            },
+        }
+        if args.title:
+            card["header"] = {
+                "title": {"tag": "plain_text", "content": args.title},
+                "template": args.color or "blue",
+                "padding": "12px 12px 12px 12px",
+            }
+        return {"msg_type": "interactive", "card": card}
+
+    if args.title:
+        content = f"## {args.title}\n{content}"
+    if byte_length(content) > WECOM_MD_MAX:
+        fail("企微 Markdown 正文超过 4096 字节")
+    return {"msgtype": "markdown", "markdown": {"content": content}}
+
+
+def build_image(platform, value):
+    if platform == "feishu":
+        return {"msg_type": "image", "content": {"image_key": value}}
+    data = read_wecom_image(value)
+    return {
+        "msgtype": "image",
+        "image": {
+            "base64": base64.b64encode(data).decode("ascii"),
+            "md5": hashlib.md5(data).hexdigest(),
+        },
+    }
+
+
+def verified_ssl_context():
+    """Use an existing trusted CA bundle; never disable certificate checks."""
+    paths = ssl.get_default_verify_paths()
+    candidates = [
+        os.environ.get("SSL_CERT_FILE"),
+        paths.cafile,
+        paths.openssl_cafile,
+        "/etc/ssl/cert.pem",
+        "/etc/ssl/certs/ca-certificates.crt",
+        "/opt/homebrew/etc/ca-certificates/cert.pem",
+        os.path.join(os.path.dirname(paths.openssl_cafile or ""), "cacert.pem"),
+    ]
+    try:
+        import certifi  # Optional; not required by the script.
+
+        candidates.append(certifi.where())
+    except ImportError:
+        pass
+
+    for candidate in candidates:
+        if candidate and os.path.isfile(candidate):
+            return ssl.create_default_context(cafile=candidate)
+    return ssl.create_default_context()
+
+
+def insecure_ssl_context():
+    context = ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
+    context.check_hostname = False
+    context.verify_mode = ssl.CERT_NONE
+    return context
+
+
+class NoRedirect(urllib.request.HTTPRedirectHandler):
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        return None
+
+
+def request_json(request, timeout, insecure=False):
+    context = insecure_ssl_context() if insecure else verified_ssl_context()
+    opener = urllib.request.build_opener(NoRedirect(), urllib.request.HTTPSHandler(context=context))
+    try:
+        try:
+            response = opener.open(request, timeout=timeout)
+        except urllib.error.HTTPError as error:
+            response = error
+        with response as stream:
+            status = stream.status
+            body = stream.read()
+    except urllib.error.URLError as error:
+        if isinstance(error.reason, ssl.SSLCertVerificationError):
+            fail("TLS 证书校验失败，请配置可信 CA；未降级重试", 1)
+        fail("网络异常或超时，发送结果未知，请勿直接重试", 3)
+    except ssl.SSLCertVerificationError:
+        fail("TLS 证书校验失败，请配置可信 CA；未降级重试", 1)
+    except (OSError, http.client.HTTPException):
+        fail("网络异常或响应中断，发送结果未知，请勿直接重试", 3)
+    try:
+        result = json.loads(body.decode("utf-8"))
+        if not isinstance(result, dict):
+            raise ValueError()
+        field = "code" if urllib.parse.urlparse(request.full_url).hostname == "open.feishu.cn" else "errcode"
+        if not 200 <= status < 300 and (type(result.get(field)) is not int or result[field] == 0):
+            raise ValueError()
+        return result
+    except (UnicodeError, ValueError):
+        fail(f"HTTP {status} 响应无法确认，发送结果未知，请勿直接重试", 3)
+
+
+def retry_limited(operation, platform, retries, wait=time.sleep):
+    field = "code" if platform == "feishu" else "errcode"
+    rate_code = 11232 if platform == "feishu" else 45009
+    for attempt in range(retries + 1):
+        result = operation()
+        code = result.get(field)
+        if type(code) is not int:
+            fail("响应缺少有效业务状态码，发送结果未知，请勿直接重试", 3)
+        if code != rate_code:
+            return result
+        if attempt >= retries:
+            fail(f"限流 code={code}，重试次数已耗尽", 4)
+        delay = min(60, (5 if platform == "feishu" else 60) * 2 ** attempt)
+        print(f"限流，{delay} 秒后重试（{attempt + 1}/{retries}）", file=sys.stderr)
+        wait(delay)
+
+
+def post_json(target, payload, args):
+    def operation():
+        request = urllib.request.Request(
+            target["url"], data=encode_payload(prepare_payload(target, payload)),
+            headers={"Content-Type": "application/json"}, method="POST",
+        )
+        return request_json(request, 15, args.insecure)
+    result = retry_limited(operation, target["platform"], args.retry)
+    code = result["code" if target["platform"] == "feishu" else "errcode"]
+    if code != 0:
+        hint = "；" + FEISHU_ERR[code] if code in FEISHU_ERR else ""
+        fail(f"发送失败 code={code}{hint}{platform_message(result, target['url'], target['secret'])}", 1)
+
+
+def feishu_sign(timestamp, secret):
+    key = f"{timestamp}\n{secret}".encode("utf-8")
+    return base64.b64encode(hmac.new(key, digestmod=hashlib.sha256).digest()).decode("ascii")
+
+
+def prepare_payload(target, payload):
+    if target["platform"] != "feishu":
+        return payload
+    payload = dict(payload)
+    if target["secret"]:
+        timestamp = str(int(time.time()))
+        payload.update(timestamp=timestamp, sign=feishu_sign(timestamp, target["secret"]))
+    if len(encode_payload(payload)) > FEISHU_MAX_BODY:
+        fail("飞书请求体超过 20 KiB")
+    return payload
+
+
+def wecom_upload(webhook, media_type, file_path, args):
+    parsed = urllib.parse.urlparse(webhook)
+    key = urllib.parse.parse_qs(parsed.query).get("key", [""])[0]
+    if not key:
+        fail("企微 webhook 缺少 key（地址已隐藏）")
+
+    with open(file_path, "rb") as file:
+        data = file.read()
+    boundary = f"----notifybot-{secrets.token_hex(12)}"
+    filename = re.sub(r'["\\\r\n]', "_", os.path.basename(file_path))
+    content_type = "audio/amr" if media_type == "voice" else "application/octet-stream"
+    header = (
+        f'--{boundary}\r\nContent-Disposition: form-data; name="media"; '
+        f'filename="{filename}"; filelength={len(data)}\r\n'
+        f"Content-Type: {content_type}\r\n\r\n"
+    ).encode("utf-8")
+    body = b"".join((header, data, f"\r\n--{boundary}--\r\n".encode("utf-8")))
+    upload_url = (
+        "https://qyapi.weixin.qq.com/cgi-bin/webhook/upload_media?"
+        + urllib.parse.urlencode({"key": key, "type": media_type})
+    )
+    request = urllib.request.Request(
+        upload_url,
+        data=body,
+        headers={
+            "Content-Type": f"multipart/form-data; boundary={boundary}",
+            "Content-Length": str(len(body)),
+        },
+        method="POST",
+    )
+    result = retry_limited(lambda: request_json(request, 60, args.insecure), "wecom", args.retry)
+    if result.get("errcode") != 0:
+        fail(f"上传失败 errcode={result.get('errcode')}{platform_message(result, webhook)}", 1)
+    if not isinstance(result.get("media_id"), str) or not result["media_id"]:
+        fail("上传成功响应缺少 media_id；消息尚未发送", 1)
+    return result["media_id"]
+
+
+def parse_args(argv):
+    value_options = {"--url", "--platform", "--at", "--at-mobile", "--title", "--color",
+                     "--target", "--config", "--retry", "--body-file"}
+    boolean_options = {"--at-all", "--dry-run", "--insecure", "--list-targets", "--help"}
+    args = SimpleNamespace(cmd=None, positional=[], at=[], at_mobile=[], at_all=False,
+                           dry_run=False, platform=None, url=None, title=None, color=None, used=set(),
+                           target=[], config=None, retry="0", body_file=None, insecure=False,
+                           list_targets=False, help=False)
+    parse_options = True
+    index = 0
+    while index < len(argv):
+        token = argv[index]
+        index += 1
+        if parse_options and token == "--":
+            parse_options = False
+            continue
+        if parse_options and token.startswith("--"):
+            if token in boolean_options:
+                args.used.add(token)
+                setattr(args, token[2:].replace("-", "_"), True)
+                continue
+            if token not in value_options:
+                fail("未知选项（参数已隐藏），请使用 --help")
+            if index == len(argv) or argv[index].startswith("--"):
+                fail(f"选项 {token} 缺少值")
+            value = argv[index]
+            index += 1
+            args.used.add(token)
+            key = token[2:].replace("-", "_")
+            if key in ("at", "at_mobile", "target"):
+                getattr(args, key).append(value)
+            else:
+                setattr(args, key, value)
+            continue
+        if args.cmd is None:
+            args.cmd = token
+        else:
+            args.positional.append(token)
+    return args
+
+
+def validate_args(args, platform):
+    allowed = {"--url", "--platform", "--dry-run", "--target", "--config", "--retry", "--insecure", "--help"}
+    if args.cmd == "text":
+        allowed.update(("--at-all", "--at", "--at-mobile", "--body-file"))
+    elif args.cmd == "md":
+        allowed.update(("--title", "--color", "--body-file"))
+    for option in args.used:
+        if option not in allowed:
+            fail(f"{args.cmd} 不支持选项 {option}")
+    if args.cmd in ("text", "md") and not args.positional:
+        fail(f"{args.cmd} 需要正文")
+    if args.cmd not in ("text", "md") and len(args.positional) != 1:
+        fail(f"{args.cmd} 需要且只接受一个参数")
+    if platform == "feishu" and args.at_mobile:
+        fail("--at-mobile 仅企业微信支持")
+    if args.cmd in ("file", "voice", "news") and platform != "wecom":
+        fail(f"{args.cmd} 仅企业微信支持")
+    if args.cmd == "post" and platform != "feishu":
+        fail("post 仅飞书支持")
+
+
+def build_payload(platform, args):
+    if args.cmd == "text":
+        payload = build_text(platform, args)
+    elif args.cmd == "md":
+        payload = build_markdown(platform, args)
+    elif args.cmd == "image":
+        payload = build_image(platform, args.positional[0])
+    elif args.cmd in ("file", "voice"):
+        payload = {}
+    elif args.cmd == "news":
+        news = load_json_arg(args.positional[0])
+        if (not isinstance(news, dict) or not isinstance(news.get("articles"), list)
+                or not 1 <= len(news["articles"]) <= 8):
+            fail("news 需要包含 1–8 条 articles")
+        payload = {"msgtype": "news", "news": news}
+    elif args.cmd == "post":
+        payload = {"msg_type": "post", "content": {"post": load_json_arg(args.positional[0])}}
+    elif args.cmd == "card":
+        card = load_json_arg(args.positional[0])
+        payload = ({"msg_type": "interactive", "card": card} if platform == "feishu"
+                   else {"msgtype": "template_card", "template_card": card})
+    else:
+        payload = load_json_arg(args.positional[0])
+
+    if args.cmd == "raw":
+        field = "msg_type" if platform == "feishu" else "msgtype"
+        if not isinstance(payload.get(field), str) or not payload[field]:
+            fail("raw 缺少对应平台的消息类型")
+    return payload
+
+
+def main(argv=None):
+    args = parse_args(sys.argv[1:] if argv is None else argv)
+    if args.help:
+        print("notify-send [--platform feishu/wecom] [--target 名称或平台:名称（可重复） | --url URL] "
+              "<text/md/image/file/voice/news/card/post/raw> [正文]\n"
+              "选项：--config FILE --list-targets --dry-run --body-file FILE（- 表示 stdin） "
+              "--retry 0..5 --insecure\n正文以 - 开头时可用 -- 分隔。")
+        return 0
+    if not re.fullmatch(r"[0-9]+", args.retry) or int(args.retry) > 5:
+        fail("--retry 必须为 0–5 的整数（额外尝试次数）")
+    args.retry = int(args.retry)
+    if args.platform and args.platform not in ("feishu", "wecom"):
+        fail("--platform 仅支持 feishu 或 wecom")
+    if args.list_targets:
+        if args.cmd or args.target or args.used - {"--config", "--list-targets", "--platform"}:
+            fail("--list-targets 只接受 --config 和 --platform")
+        print(json.dumps(resolve_targets(args), ensure_ascii=False, indent=2))
+        return 0
+    if args.cmd not in ("text", "md", "image", "file", "voice", "news", "card", "post", "raw"):
+        fail("缺少或无效子命令；请使用 --help")
+    if args.body_file is not None:
+        if args.cmd not in ("text", "md") or args.positional:
+            fail("--body-file 仅用于 text/md，不能同时提供正文")
+        args.positional = [read_text(args.body_file)]
+    if args.cmd in ("text", "md") and not " ".join(args.positional).strip():
+        fail("正文不能为空")
+    targets = resolve_targets(args)
+    if len(targets) > 1 and args.cmd not in ("text", "md"):
+        fail("多目标发送仅支持 text/md")
+    if args.at and len({target["platform"] for target in targets}) > 1:
+        fail("跨平台发送不能使用 --at，请按平台分别发送")
+    plans = []
+    for target in targets:
+        validate_args(args, target["platform"])
+        payload = build_payload(target["platform"], args)
+        if args.cmd in ("file", "voice"):
+            validate_upload_file(args.cmd, args.positional[0])
+        prepare_payload(target, payload)
+        plans.append((target, payload))
+    if args.dry_run:
+        preview = [{"target": target["name"], "platform": target["platform"],
+                    "payload": {"upload_required": True, "msgtype": args.cmd} if args.cmd in ("file", "voice") else payload}
+                   for target, payload in plans]
+        print(json.dumps(preview[0]["payload"] if len(preview) == 1 else preview, ensure_ascii=False, indent=2))
+        return 0
+    if args.insecure:
+        print("警告：本次显式关闭 TLS 证书校验", file=sys.stderr)
+    results = []
+    for target, payload in plans:
+        try:
+            if args.cmd in ("file", "voice"):
+                media_id = wecom_upload(target["url"], args.cmd, args.positional[0], args)
+                payload = {"msgtype": args.cmd, args.cmd: {"media_id": media_id}}
+            post_json(target, payload, args)
+            results.append({"target": target["name"], "platform": target["platform"], "status": "sent", "exit_code": 0})
+        except Exception as error:
+            code = error.exit_code if isinstance(error, NotifyError) else 3
+            results.append({"target": target["name"], "platform": target["platform"],
+                            "status": "unknown" if code == 3 else "failed", "exit_code": code,
+                            "error": str(error) if isinstance(error, NotifyError) else "执行异常，发送结果未知，请勿直接重试"})
+    print(json.dumps({"results": results}, ensure_ascii=False, indent=2))
+    codes = [result["exit_code"] for result in results]
+    return 3 if 3 in codes else next((code for code in codes if code), 0)
+
+
+if __name__ == "__main__":
+    try:
+        sys.exit(main())
+    except NotifyError as error:
+        print(f"错误：{error}", file=sys.stderr)
+        sys.exit(error.exit_code)
+    except (OSError, UnicodeError, ValueError):
+        print("错误：本地输入或配置读取失败（详情已隐藏）", file=sys.stderr)
+        sys.exit(2)

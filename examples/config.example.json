@@ -1,0 +1,18 @@
+{
+  "feishu": {
+    "工作群": {
+      "url": "https://open.feishu.cn/open-apis/bot/v2/hook/REPLACE_ME_FEISHU_WORK"
+    },
+    "告警群": {
+      "url": "https://open.feishu.cn/open-apis/bot/v2/hook/REPLACE_ME_FEISHU_ALERTS"
+    }
+  },
+  "wecom": {
+    "工作群": {
+      "url": "https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key=REPLACE_ME_WECOM_WORK"
+    },
+    "告警群": {
+      "url": "https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key=REPLACE_ME_WECOM_ALERTS"
+    }
+  }
+}
