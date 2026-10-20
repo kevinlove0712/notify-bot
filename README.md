@@ -25,11 +25,11 @@ Node.js / Python 双实现，无需安装第三方运行依赖。两版通过 HT
 克隆仓库，或下载源码并解压为 `notify-bot` 目录。无需 `npm install` 或 `pip install`：
 
 ```bash
-git clone --branch v0.2.0 --depth 1 https://github.com/kevinlove0712/notify-bot.git
+git clone --branch v0.2.1 --depth 1 https://github.com/kevinlove0712/notify-bot.git
 cd notify-bot
 ```
 
-上述命令固定使用 `v0.2.0`；也可下载 [v0.2.0 源码包](https://github.com/kevinlove0712/notify-bot/archive/refs/tags/v0.2.0.zip)。要跟随开发分支，克隆时省略 `--branch v0.2.0 --depth 1`。
+上述命令固定使用 `v0.2.1`；也可下载 [v0.2.1 源码包](https://github.com/kevinlove0712/notify-bot/archive/refs/tags/v0.2.1.zip)。要跟随开发分支，克隆时省略 `--branch v0.2.1 --depth 1`。
 
 在仓库根目录选择一个运行时：
 
@@ -49,7 +49,7 @@ python3 scripts/notify-send --help
 npx skills add kevinlove0712/notify-bot --skill notify-bot
 ```
 
-[skills CLI](https://github.com/vercel-labs/skills#install-a-skill) 当前需要 Node.js 22.20+；这是安装器的要求，notify-bot 本身仍可使用 Node.js 18+ 或 Python 3.10+。默认安装到当前项目，添加 `-g` 可全局安装。此命令安装仓库默认分支的当前内容；需要固定 `v0.2.0` 时，使用上面的版本克隆方式。已有同名 skill 时先备份，避免覆盖本地修改。
+[skills CLI](https://github.com/vercel-labs/skills#install-a-skill) 当前需要 Node.js 22.20+；这是安装器的要求，notify-bot 本身仍可使用 Node.js 18+ 或 Python 3.10+。默认安装到当前项目，添加 `-g` 可全局安装。此命令安装仓库默认分支的当前内容；需要固定 `v0.2.1` 时，使用上面的版本克隆方式。已有同名 skill 时先备份，避免覆盖本地修改。
 
 手动安装时，将完整目录放入你的 Agent 支持的 skills 目录，保留 `SKILL.md`、`scripts/` 和文档的相对位置。安装位置由所用 Agent 决定；可先用命令行独立试用。
 
