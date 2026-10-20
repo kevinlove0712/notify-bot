@@ -30,7 +30,17 @@ python3 scripts/notify-send --help
 
 No `npm install` or `pip install` is needed. You can also download versioned source archives from [Releases](https://github.com/kevinlove0712/notify-bot/releases). Omit `--branch v0.1.0 --depth 1` to clone the development branch.
 
-To use this repository as an agent skill, place the complete directory in your agent's supported skills directory. Preserve the relative locations of `SKILL.md`, `scripts/`, and the documentation. Back up an existing skill before replacing it. The agent instructions and detailed reference are currently in Chinese.
+### Install as an agent skill with the skills CLI
+
+Run this from the project where you want to use the skill, then choose your agent when prompted:
+
+```bash
+npx skills add kevinlove0712/notify-bot --skill notify-bot
+```
+
+The [skills CLI](https://github.com/vercel-labs/skills#install-a-skill) currently requires Node.js 22.20+. This requirement applies to the installer; notify-bot itself still supports Node.js 18+ or Python 3.10+. Installation is project-local by default; add `-g` for a global installation. This command installs the current contents of the repository's default branch. Use the versioned clone above to pin `v0.1.0`. Back up an existing skill before replacing it.
+
+For manual installation, place the complete directory in your agent's supported skills directory. Preserve the relative locations of `SKILL.md`, `scripts/`, and the documentation. The agent instructions and detailed reference are currently in Chinese.
 
 ## Quick start
 
