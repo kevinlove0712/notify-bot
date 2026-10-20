@@ -41,8 +41,12 @@ class CliTests(unittest.TestCase):
         self.config.chmod(0o600)
 
     def run_cli(self, runtime, args, stdin=None, extra=None):
-        return subprocess.run([*runtime, *args], input=stdin, env={**self.env, **(extra or {})},
-                              capture_output=True, text=True, encoding="utf-8", timeout=15)
+        # Binary pipes prevent Windows text mode from rewriting the test input.
+        result = subprocess.run([*runtime, *args], input=stdin.encode("utf-8") if stdin is not None else None,
+                                env={**self.env, **(extra or {})}, capture_output=True, timeout=15)
+        result.stdout = result.stdout.decode("utf-8")
+        result.stderr = result.stderr.decode("utf-8")
+        return result
 
     def both(self, args, code=0, stdin=None, extra=None):
         results = [self.run_cli(runtime, args, stdin, extra) for runtime in RUNTIMES]
