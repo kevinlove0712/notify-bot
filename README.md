@@ -3,6 +3,7 @@
 [English](README.en.md) | 简体中文
 
 [![Offline tests](https://github.com/kevinlove0712/notify-bot/actions/workflows/test.yml/badge.svg?branch=main)](https://github.com/kevinlove0712/notify-bot/actions/workflows/test.yml)
+[![Install with skills.sh](https://img.shields.io/badge/skills.sh-install-blue)](https://skills.sh/kevinlove0712/notify-bot/notify-bot)
 
 让 Agent 或命令行通过飞书、企业微信群机器人发送通知。按平台管理多个命名群，一次调用可向多个目标发送文本或 Markdown。
 
@@ -39,6 +40,8 @@ python3 scripts/notify-send --help
 ```
 
 ### 通过 skills CLI 安装为 Agent Skill
+
+在 [skills.sh 查看 notify-bot](https://skills.sh/kevinlove0712/notify-bot/notify-bot)，或使用下面的命令安装。
 
 也可以在需要使用该 skill 的项目目录运行，按提示选择 Agent：
 

@@ -3,6 +3,7 @@
 English | [简体中文](README.md)
 
 [![Offline tests](https://github.com/kevinlove0712/notify-bot/actions/workflows/test.yml/badge.svg?branch=main)](https://github.com/kevinlove0712/notify-bot/actions/workflows/test.yml)
+[![Install with skills.sh](https://img.shields.io/badge/skills.sh-install-blue)](https://skills.sh/kevinlove0712/notify-bot/notify-bot)
 
 Send notifications to Feishu and WeCom group bots from an agent or the command line. Organize multiple named webhooks by platform and send text or Markdown to selected targets in one invocation.
 
@@ -31,6 +32,8 @@ python3 scripts/notify-send --help
 No `npm install` or `pip install` is needed. You can also download versioned source archives from [Releases](https://github.com/kevinlove0712/notify-bot/releases). Omit `--branch v0.1.0 --depth 1` to clone the development branch.
 
 ### Install as an agent skill with the skills CLI
+
+View [notify-bot on skills.sh](https://skills.sh/kevinlove0712/notify-bot/notify-bot), or install it with the command below.
 
 Run this from the project where you want to use the skill, then choose your agent when prompted:
 
