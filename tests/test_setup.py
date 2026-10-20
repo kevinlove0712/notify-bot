@@ -6,6 +6,7 @@ import io
 import json
 import os
 from pathlib import Path
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -170,6 +171,63 @@ bot.main(['--doctor', '--config', process.argv[2]]);"""
         self.assertTrue(os.path.samefile(root, claude))
         self.assertFalse(self.config.exists())
         self.run_command(installer, 2)  # Never replace an existing independent copy.
+
+    def test_shared_install_excludes_private_files_and_remains_usable(self):
+        source = self.home / "源码 source"
+        shutil.copytree(ROOT, source, ignore=shutil.ignore_patterns(".git", "__pycache__"))
+        private_files = [
+            ".env", ".env.local", "config.json", "bots.json", "secrets/token.txt",
+            ".idea/workspace.xml", "scripts/private.js", "references/notes.md",
+            "examples/curl/config.json", "tests/offline/private.txt",
+            "unlisted-file.txt",
+        ]
+        for name in private_files:
+            file = source / name
+            file.parent.mkdir(parents=True, exist_ok=True)
+            file.write_text(TOKEN, encoding="utf-8")
+        installer = ["node", str(source / "scripts/install-shared.js")]
+        self.run_command([*installer, "--home", str(self.home), "--claude"])
+        installed = self.home / ".agents/skills/notify-bot"
+        for name in private_files:
+            self.assertFalse((installed / name).exists(), name)
+            self.assertEqual((source / name).read_text(encoding="utf-8"), TOKEN)
+        for name in ["SKILL.md", "LICENSE", "README.md", "README.en.md",
+                     "references/setup.md", "examples/curl/prepare-request.py",
+                     "tests/run_tests.py", "tests/offline/block-network.cjs"]:
+            self.assertEqual((installed / name).read_bytes(), (source / name).read_bytes())
+        for script in [["node", str(installed / "scripts/notify-send.js")],
+                       [sys.executable, str(installed / "scripts/notify-send")]]:
+            report = self.run_command([*script, "--config", str(installed / "examples/config.example.json"),
+                                       "--list-targets"])
+            self.assertEqual(len(json.loads(report.stdout)), 4)
+        # A copied bundle can be installed again without a Git checkout.
+        second_home = self.home / "second home"
+        self.run_command(["node", str(installed / "scripts/install-shared.js"),
+                          "--home", str(second_home)])
+        self.assertTrue((second_home / ".agents/skills/notify-bot/SKILL.md").is_file())
+
+    @unittest.skipIf(os.name == "nt", "File symlinks may require Windows developer mode")
+    def test_shared_copy_rejects_symlinked_release_files_and_directories(self):
+        source = self.home / "source"
+        shutil.copytree(ROOT, source, ignore=shutil.ignore_patterns(".git", "__pycache__"))
+        external = self.home / "private"
+        external.mkdir()
+        (external / "setup.md").write_text(TOKEN, encoding="utf-8")
+        for name in ["references/setup.md", "references"]:
+            with self.subTest(name=name):
+                entry = source / name
+                saved = self.home / "saved"
+                entry.rename(saved)
+                entry.symlink_to(external if saved.is_dir() else external / "setup.md",
+                                 target_is_directory=saved.is_dir())
+                install_home = self.home / name.replace("/", "-")
+                try:
+                    self.run_command(["node", str(source / "scripts/install-shared.js"),
+                                      "--home", str(install_home), "--claude"], 2)
+                    self.assertFalse(install_home.exists())
+                finally:
+                    entry.unlink()
+                    saved.rename(entry)
 
     @unittest.skipIf(os.name == "nt", "POSIX symlinks; Windows directory junction is tested above")
     def test_link_source_and_shared_config(self):

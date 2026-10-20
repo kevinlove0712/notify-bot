@@ -17,11 +17,13 @@ python3 tests/run_tests.py
 Windows 使用 `python tests/run_tests.py`（或 `py -3 tests/run_tests.py`），无需 Bash。CI 包含两组原生 Windows Node/Python 组合；Windows 显式跳过 7 个 Bash/curl 示例测试，这些仍由 Linux/macOS 执行。编码回归覆盖带 BOM 的 UTF-8 配置/JSON、中文与空格路径、emoji、CRLF/LF 正文、stdin 和非 UTF-8 默认编码下的重定向输出。修改运行时或输入输出行为时，须保持两版结果一致。
 
 - `tests/test_cli.py`：CLI 参数、配置路由、预检、载荷对齐及 Python 传输行为。
-- `tests/test_setup.py`：首次初始化、拒绝覆盖、诊断与凭证隐藏、权限错误、配置优先级、共享安装冲突和链接。Windows 跳过 POSIX 文件链接测试，目录 junction 在 Windows 实测。
+- `tests/test_setup.py`：首次初始化、拒绝覆盖、诊断与凭证隐藏、权限错误、配置优先级、共享安装冲突和链接，以及私有文件排除与发布文件链接拒绝。Windows 跳过 POSIX 文件链接测试，目录 junction 在 Windows 实测。
 - `tests/test_transport.js`：Node 传输、错误分类、脱敏与重试行为。
 - `tests/test_distribution.py`：复制到含空格目录、示例配置、隔离安装、配置优先级与文档链接。
 - `tests/test_curl_examples.py`：使用假的 curl 验证签名、JSON 转义、预检、超时不重试；真实 curl 仅解析配置并显示帮助，不联网。
 - `tests/offline/`：仅用于测试的网络保护，不是运行依赖。
+
+新增发布文件时同步更新 `scripts/install-shared.js` 的 `RELEASE_FILES` 清单。复制安装只包含这些具体文件；不要用整个目录或 Git 跟踪状态代替清单，也不要把真实凭证写入发布文件。
 
 GitHub Actions 使用同一入口，不需要设置任何仓库 Secret。CI 运行在常规 `pull_request` / `push` 事件，权限仅为读取源码。
 

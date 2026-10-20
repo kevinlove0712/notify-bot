@@ -5,6 +5,34 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 
+// Explicit release files, not whole directories: local credentials and ignored
+// files must never become part of a copied skill. Keep new release files here.
+const RELEASE_FILES = [
+  '.github/workflows/test.yml', '.gitignore', 'CHANGELOG.md', 'CONTRIBUTING.md',
+  'LICENSE', 'README.en.md', 'README.md', 'SECURITY.md', 'SKILL.md', 'USER_GUIDE.md',
+  'examples/config.example.json', 'examples/curl/README.md',
+  'examples/curl/feishu-text.sh', 'examples/curl/prepare-request.py', 'examples/curl/wecom-text.sh',
+  'references/cli-reference.md', 'references/setup.md',
+  'scripts/install-shared.js', 'scripts/notify-send', 'scripts/notify-send.js',
+  'tests/offline/block-network.cjs', 'tests/offline/sitecustomize.py', 'tests/run_tests.py',
+  'tests/test_cli.py', 'tests/test_curl_examples.py', 'tests/test_distribution.py',
+  'tests/test_encoding.py', 'tests/test_setup.py', 'tests/test_transport.js',
+];
+
+function validateCopySource(source) {
+  for (const file of RELEASE_FILES) {
+    let current = source;
+    const parts = file.split('/');
+    for (let i = 0; i < parts.length; i++) {
+      current = path.join(current, parts[i]);
+      const stat = fs.lstatSync(current);
+      if (stat.isSymbolicLink() || !(i === parts.length - 1 ? stat.isFile() : stat.isDirectory())) {
+        throw new Error('发布文件及其子目录必须为普通文件/目录，不能使用符号链接');
+      }
+    }
+  }
+}
+
 function exists(file) {
   try { fs.lstatSync(file); return true; }
   catch (error) { if (error.code === 'ENOENT') return false; throw error; }
@@ -52,6 +80,7 @@ function main(argv) {
   for (const item of plan) {
     item.reuse = same(item.destination, item.source);
     if (exists(item.destination) && !item.reuse) throw new Error(`目标已存在，未覆盖：${item.destination}`);
+    if (item.kind === 'copy' && !item.reuse) validateCopySource(item.source);
   }
   for (const item of plan) {
     if (!item.reuse) {
@@ -59,8 +88,11 @@ function main(argv) {
       if (item.kind === 'copy') {
         // Reserve the destination so a concurrent installer cannot merge files.
         fs.mkdirSync(item.destination);
-        fs.cpSync(item.source, item.destination, { recursive: true, force: false, errorOnExist: true,
-          filter: file => !['.git', '__pycache__', '.DS_Store'].includes(path.basename(file)) });
+        for (const file of RELEASE_FILES) {
+          const destination = path.join(item.destination, file);
+          fs.mkdirSync(path.dirname(destination), { recursive: true });
+          fs.cpSync(path.join(item.source, file), destination, { force: false, errorOnExist: true });
+        }
       } else {
         fs.symlinkSync(item.source, item.destination,
           item.kind === 'file-link' ? 'file' : process.platform === 'win32' ? 'junction' : 'dir');

@@ -53,6 +53,8 @@ Install this local bundle once for multiple agents:
 node scripts/install-shared.js --claude
 ```
 
+Copy installs use an explicit release-file list, excluding extra local files such as `.env`, private configurations, and IDE metadata. Listed files and their subdirectories must not be symlinks. Keep the release files and example configuration free of real credentials. Explicit `--link-source` installs share the entire source directory without filtering.
+
 The primary copy lives at `~/.agents/skills/notify-bot`; the optional Claude entry links to it. Existing conflicting destinations are refused. Run `node scripts/notify-send.js --init-config` separately to create a UTF-8 template at `~/.config/notify-bot/config.json` (under the Windows user profile for native runtimes). Existing files and symlinks are never overwritten. Replace placeholder webhooks in your editor and remove unused targets, then run `node scripts/notify-send.js --doctor`. The Python CLI accepts the same options.
 
 Doctor reports the actual runtime, executable, home, selected configuration path/source, and target names without network requests or webhook/secrets. Status `ok` exits 0; missing/unreadable/invalid/incomplete configuration exits 2. It does not validate remote credentials. A real named-target send refuses `REPLACE_ME` addresses. These management modes accept only an optional `--config FILE`; precedence remains argument > `NOTIFY_CONFIG_FILE` > default.
