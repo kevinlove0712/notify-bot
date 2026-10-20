@@ -21,6 +21,8 @@ node scripts/notify-send.js --init-config
 
 Windows 可用 `python` 或 `py -3`。初始化仅生成含 `REPLACE_ME_*` 的 UTF-8 模板，不联网、不发送，不读取其他 Agent 的凭证。已有文件、目录或断开的符号链接都拒绝覆盖。POSIX 新文件模式为 `600`；Windows 采用目录继承的 ACL。发生写盘错误时检查所报路径；CLI 不自动删除可能部分写入的文件。
 
+初始化、诊断与发送须分开调用；`--init-config` 和 `--doctor` 仅可搭配 `--config FILE`。诊断为 `missing` 时先核对配置路径，再决定是否初始化；模板不是有效凭证，须填写地址并删除不用的目标。
+
 用编辑器填写目标 webhook，删除不用的占位目标。飞书启用签名时增加对应目标的 `secret`，无需把凭证粘贴到聊天中。然后运行：
 
 ```bash
@@ -29,7 +31,7 @@ node scripts/notify-send.js --list-targets
 node scripts/notify-send.js --target feishu:工作群 text "离线预览 ✅" --dry-run
 ```
 
-已有配置的用户直接运行 `--doctor`。诊断会检查所有目标的本地格式；占位地址或空配置返回 `incomplete`。列表和预览可查看模板，真实命名目标发送拒绝占位地址。诊断不验证 webhook 是否有效、平台权限、网络或群内渲染。
+已有配置的用户直接运行 `--doctor`。诊断会检查所有目标的本地格式；占位地址或空配置返回 `incomplete`。仅 `ok` 退出码为 0，`missing`、`incomplete` 等其他状态均为 2。列表和预览可查看模板，真实命名目标发送拒绝占位地址。诊断不验证 webhook 是否有效、平台权限、网络或群内渲染；真实测试仍须用户明确授权。
 
 ## 一份 skill，多个 Agent 共用
 
@@ -45,7 +47,40 @@ node scripts/install-shared.js --claude
 
 该命令不创建机器人配置。所有目标先检查冲突；不同内容的既有目录、文件、断开的链接都拒绝覆盖。不提供强制覆盖开关。对已指向同一源的链接可重复执行。磁盘或权限错误可能留下部分安装，检查输出后处理，不盲目重跑。
 
-可用 `--source DIR` 指定完整源码目录，`--home DIR` 指定要安装的用户目录；普通使用无需指定。更新时先备份现有 skill，再替换主目录中的代码和文档，保留目录链接及目录外的全局配置。
+可用 `--source DIR` 指定完整源码目录，`--home DIR` 指定要安装的用户目录；普通使用无需指定。此脚本不登记 skills CLI 更新来源，也不提供 `--update`；后续升级见下节。
+
+## 升级与迁移
+
+### 已通过 skills CLI 安装
+
+仅更新 notify-bot，按安装范围选择一条：
+
+```bash
+# 全局安装
+npx skills update notify-bot --global
+# 项目安装：在原项目目录运行
+npx skills update notify-bot --project
+```
+
+Windows PowerShell 若阻止 `npx.ps1`，将 `npx` 换成 `npx.cmd`。安装器需要 Node.js 22.20+；先备份 skill 中自行修改的内容，更新可能替换它们。没有指定版本来源的安装跟随仓库默认分支，不等于固定到最新 Release；需要锁定版本时使用 README 中的版本克隆方式。
+
+配置应继续放在 skill 目录外，无需重新运行 `--init-config` 或重新填写 webhook。更新后在实际安装目录运行 `node scripts/notify-send.js --doctor`，再让 Agent 重新加载 skill。不要用真实发送作为默认升级检查。
+
+### 手动复制或 install-shared.js 安装
+
+`skills update` 依赖此前的 skills CLI 安装记录，不能自动接管手动安装。推荐一次性迁移：
+
+1. 确认 skill 主目录与各 Agent 的链接；将旧主目录备份到所有 skills 目录之外，保留目录外的配置。
+2. 移走旧主目录，并移除仅指向它的入口链接；不要删除其他 skill。若原先用 `--link-source`，保留链接指向的源码目录，只移除安装入口。
+3. 用 skills CLI 重新安装并选择所需 Agent。全局安装示例：
+
+   ```bash
+   npx skills add kevinlove0712/notify-bot --skill notify-bot --global
+   ```
+
+4. 检查新的主目录和各 Agent 入口，从安装目录运行 `--doctor`。以后使用上面的单 skill 更新命令。
+
+项目安装迁移时在原项目目录执行 `add`，省略 `--global`。不迁移也可以继续手动更新：备份后替换主目录中的代码和文档，保留共享链接和外置配置；不要在旧目录上反复执行安装脚本。
 
 ## WSL 与 Windows 共用
 
@@ -65,6 +100,8 @@ node /mnt/c/Users/WINDOWS_USER/.agents/skills/notify-bot/scripts/install-shared.
 ## 区分 shell 与运行时
 
 在 Agent **自己的执行工具**里运行 `--doctor`，不要拿另一个终端的结果代替。报告包含运行时版本、可执行文件、home、配置来源及状态，仅输出目标名称/平台；不枚举完整环境或读取 Agent token。
+
+Windows 显式用 `node`、`python` 或 `py -3` 启动脚本，不依赖 shebang。文件/stdin 输入和输出使用 UTF-8；PowerShell 的中文、多行正文优先使用 `--body-file`，编码细节见[Windows 使用说明](../USER_GUIDE.md#windows-与-powershell)。
 
 | 现象 | 判断与做法 |
 |---|---|

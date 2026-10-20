@@ -6,6 +6,8 @@
 
 多个 Agent 共用、Windows/Git Bash/WSL 的区别，以及权限与 TLS 排错，见[环境与共享安装](references/setup.md)。配置保存在 skill 目录外，更新 skill 时无需重新填写。
 
+升级全局 skills CLI 安装用 `npx skills update notify-bot --global`；项目安装在原项目目录用 `--project`。手动安装迁移与更新后检查见[升级与迁移](references/setup.md#升级与迁移)。
+
 ## 先配置收件群
 
 默认读取 `~/.config/notify-bot/config.json`。文件位置优先级：`--config FILE` > `NOTIFY_CONFIG_FILE` > 默认路径。文件使用 JSON，不执行 shell 表达式或变量替换。

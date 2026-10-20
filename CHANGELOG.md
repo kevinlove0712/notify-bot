@@ -1,5 +1,10 @@
 # Changelog
 
+## Unreleased
+
+- 补充 skills CLI 单 skill 升级命令、全局/项目范围、手动安装迁移及更新后离线检查。
+- 精简 Agent 入口，将 Windows/WSL、首次配置和诊断细节集中到环境与安装说明。
+
 ## [v0.2.0](https://github.com/kevinlove0712/notify-bot/compare/v0.1.0...v0.2.0) — 2026-10-20
 
 - 修复共享安装器夹带源码目录私有文件的问题：仅复制明确列出的发布文件，安装前拒绝清单内的符号链接，并补充离线回归测试。

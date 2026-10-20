@@ -45,6 +45,20 @@ The [skills CLI](https://github.com/vercel-labs/skills#install-a-skill) currentl
 
 For manual installation, place the complete directory in your agent's supported skills directory. Preserve the relative locations of `SKILL.md`, `scripts/`, and the documentation. The agent instructions and detailed reference are currently in Chinese.
 
+### Updating
+
+For installations managed by the skills CLI, choose the matching scope to update only notify-bot:
+
+```bash
+npx skills update notify-bot --global
+# Project installation: run from the original project directory
+npx skills update notify-bot --project
+```
+
+Back up local edits inside the skill first; updates may replace them. Keep webhook configuration outside the skill directory and do not reinitialize it. Default-branch installations follow that branch, rather than a pinned Release; use the versioned clone above to pin a version. On PowerShell, use `npx.cmd` if `npx.ps1` is blocked.
+
+Manual copies and `install-shared.js` installs lack skills CLI tracking. To migrate, back up and move the old skill outside all skills directories, remove only its agent links, and run `npx skills add kevinlove0712/notify-bot --skill notify-bot --global`, selecting your agents. For `--link-source` installs, remove the installation links and keep the source checkout. Omit `--global` for project installations. Run `node scripts/notify-send.js --doctor` from the installed directory afterward and reload the skill in your agent. See [migration details (Chinese)](references/setup.md#升级与迁移).
+
 ### Shared global installation and first use
 
 Install this local bundle once for multiple agents:

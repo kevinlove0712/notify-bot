@@ -53,6 +53,18 @@ npx skills add kevinlove0712/notify-bot --skill notify-bot
 
 手动安装时，将完整目录放入你的 Agent 支持的 skills 目录，保留 `SKILL.md`、`scripts/` 和文档的相对位置。安装位置由所用 Agent 决定；可先用命令行独立试用。
 
+### 升级
+
+已通过 skills CLI 安装的用户，按安装范围选择一条，仅更新 notify-bot：
+
+```bash
+npx skills update notify-bot --global
+# 项目安装：在原项目目录执行
+npx skills update notify-bot --project
+```
+
+先备份 skill 内的本地修改，外置 webhook 配置无需重建。默认分支安装会跟随默认分支更新；固定版本请使用上面的版本克隆方式。手动复制或 `install-shared.js` 安装的用户需先迁移，具体步骤和更新后检查见[升级与迁移](references/setup.md#升级与迁移)。
+
 ### 全局共享与首次配置
 
 将当前完整源码安装为一份多 Agent 共享 skill：
