@@ -2,7 +2,9 @@
 
 这份文档面向使用者：配置哪些群、怎样指定目标、Node/Python 与 HTTPS 如何配合。AI 执行时使用精简的 [SKILL.md](SKILL.md)；格式限制、完整选项和退出码见 [CLI 参考](references/cli-reference.md)。
 
-首次安装先看 [README](README.md#环境与安装)。可复制 [示例配置](examples/config.example.json)，再按下方说明填写自己的群地址。
+首次安装先看 [README](README.md#环境与安装)。使用 `node scripts/notify-send.js --init-config` 在固定全局位置创建模板（Python 可用 `python3 scripts/notify-send --init-config`，Windows 用 `python` 或 `py -3`），再填写自己的群地址。已有配置不覆盖；已有用户直接运行 `--doctor`。
+
+多个 Agent 共用、Windows/Git Bash/WSL 的区别，以及权限与 TLS 排错，见[环境与共享安装](references/setup.md)。配置保存在 skill 目录外，更新 skill 时无需重新填写。
 
 ## 先配置收件群
 
@@ -35,7 +37,7 @@ macOS/Linux 推荐将配置设为只有自己可读写：
 chmod 600 ~/.config/notify-bot/config.json
 ```
 
-脚本会在权限过宽时警告，但不会自动修改文件。配置中包含发送凭证，不要提交 Git 或公开分享。脚本不再自行读取 `.zshenv`，也不会在运行时创建、迁移或覆盖配置文件。已有的旧 `targets` 平铺文件需要先迁移，规则见 [配置参考](references/cli-reference.md)。
+脚本会在权限过宽时警告，但不会自动修改文件。配置中包含发送凭证，不要提交 Git 或公开分享。脚本不自行读取 `.zshenv`；只有显式 `--init-config` 才创建新模板，发送和诊断不创建、迁移或覆盖配置。已有的旧 `targets` 平铺文件需要先迁移，规则见 [配置参考](references/cli-reference.md)。
 
 ## 按平台和名称选择
 

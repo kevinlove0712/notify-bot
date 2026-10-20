@@ -17,11 +17,22 @@ Windows 默认路径为 `%USERPROFILE%\.config\notify-bot\config.json`，文件 
 - **跨平台多个目标**：`--target feishu:工作群 --target wecom:工作群`。若同时加 `--platform`，所有前缀必须与它一致。
 - **仅名称兼容用法**：`--target 名称` 仅在该名称跨平台唯一时可用；同名时直接报错，不猜测平台。
 - **查看配置**：`--list-targets` 列出全部名称/平台；`--platform feishu --list-targets` 只列飞书分组，不显示地址和密钥。
-- `--target` 与 `--url` 互斥。`--config` 需要搭配 `--target` 或 `--list-targets`；仅指定平台或配置文件，不会自动选择分组中的第一个目标。
+- `--target` 与 `--url` 互斥。发送/列表时 `--config` 需要搭配 `--target` 或 `--list-targets`；管理操作也可搭配 `--init-config` 或 `--doctor`。仅指定平台或配置文件，不会自动选择分组中的第一个目标。
 - 多目标仅支持 `text`/`md`；先检查全部目标与正文，再逐个发送、分别记录结果。重复选择同一目标或同一 webhook 的多个别名会被拒绝。
 - 更改地址前确认其对应的群；写入后用 `--list-targets` 和 `--dry-run` 验证，不以真实发送作为默认检查。
 
 旧的 `{"targets":{"名称":{"platform":"feishu","url":"..."}}}` 文件需要将每项按 `platform` 移入对应根级分组，并删除条目中的 `platform` 字段。CLI 不自动修改文件；遇到旧结构会提示迁移。旧文件需明确迁移，不会由发送命令自动重写。
+
+## 初始化与离线诊断
+
+`--init-config` 与 `--doctor` 是独立操作，各自仅接受 `--config FILE`，也遵守 `NOTIFY_CONFIG_FILE` 和默认位置的优先级。不与正文、目标、`--dry-run` 或其他操作组合使用。
+
+- `--init-config`：以独占创建方式写入 UTF-8 占位模板，自动创建父目录；已有文件或符号链接不覆盖，返回 2。成功返回 0，输出 `path`、`source`、`status: created` 和填写提示。POSIX 新文件权限 `600`，Windows 使用继承 ACL。
+- `--doctor`：只读、不联网，输出 JSON：`runtime` 包含 `name/version/platform/executable/home`；`environment` 包含 `wsl_kernel/wsl_environment/msystem`（仅环境线索）；`config` 包含 `path/source/status/targets`，错误时还有安全的 `message`；`network_checked` 始终为 `false`。不输出 webhook、密钥或整个环境。
+- `config.source` 为 `argument`、`environment` 或 `default`。`config.status` 为 `ok` 时退出 0，其余退出 2：`missing`、`permission_denied`、`unreadable`、`invalid_json`、`invalid_config`、`incomplete`。
+- `ok` 仅表示所有配置目标通过本地格式检查，不能证明凭证、网络或平台可用。空配置和含 `REPLACE_ME` 的模板为 `incomplete`；真实命名目标发送拒绝占位地址，离线预览仍可用。
+
+首次配置、跨 Agent 安装与 WSL 共享见[环境与共享安装](setup.md)。文件不存在、权限不足和 JSON 错误分别提供操作提示；不会因文件读不到而自动新建另一份配置。
 
 ## 兼容旧调用
 
@@ -57,7 +68,7 @@ Windows 默认路径为 `%USERPROFILE%\.config\notify-bot\config.json`，文件 
 
 | 退出码 | 含义 |
 |---|---|
-| 0 | 发送成功；或列表/预览操作成功 |
+| 0 | 发送成功；或列表/预览/初始化成功；或离线诊断状态为 ok |
 | 1 | 平台明确拒绝或 TLS 校验失败，不自动重试 |
 | 2 | 本地参数、配置或预检错误 |
 | 3 | 结果未知，不自动重试 |

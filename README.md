@@ -53,6 +53,18 @@ npx skills add kevinlove0712/notify-bot --skill notify-bot
 
 手动安装时，将完整目录放入你的 Agent 支持的 skills 目录，保留 `SKILL.md`、`scripts/` 和文档的相对位置。安装位置由所用 Agent 决定；可先用命令行独立试用。
 
+### 全局共享与首次配置
+
+将当前完整源码安装为一份多 Agent 共享 skill：
+
+```bash
+node scripts/install-shared.js --claude
+```
+
+主目录为 `~/.agents/skills/notify-bot`，Claude 通过同源链接使用；已有目录不覆盖。初始化配置另用 `node scripts/notify-send.js --init-config`，固定存放于 `~/.config/notify-bot/config.json`，不放在 skill 目录内。填写 webhook 并删除不用的占位目标后运行 `node scripts/notify-send.js --doctor`，它仅诊断运行时和配置，不联网或输出凭证。也可用 Python 执行对应 CLI 参数。
+
+WSL 共用 Windows 文件需显式链接，完整命令与环境区分见[环境与共享安装](references/setup.md)。这些新功能属于当前开发版本，旧 `v0.1.0` 不包含。
+
 ### Windows / PowerShell
 
 Windows 适配目前在 `main`，尚未包含在 `v0.1.0` 中。克隆时省略 `--branch v0.1.0 --depth 1`，或使用上述 skills CLI 安装。若 PowerShell 阻止 `npx.ps1`，使用 `npx.cmd skills add kevinlove0712/notify-bot --skill notify-bot`，无需调整系统执行策略。
@@ -60,12 +72,7 @@ Windows 适配目前在 `main`，尚未包含在 `v0.1.0` 中。克隆时省略 
 推荐 PowerShell 7。以下命令在仓库根目录运行，配置已存在时不会覆盖：
 
 ```powershell
-$notifyDir = Join-Path $env:USERPROFILE '.config\notify-bot'
-$notifyConfig = Join-Path $notifyDir 'config.json'
-New-Item -ItemType Directory -Force -Path $notifyDir | Out-Null
-if (-not (Test-Path -LiteralPath $notifyConfig)) {
-    Copy-Item -LiteralPath '.\examples\config.example.json' -Destination $notifyConfig
-}
+node .\scripts\notify-send.js --init-config
 node .\scripts\notify-send.js --list-targets
 node .\scripts\notify-send.js --platform wecom text '预览 🙂' --dry-run
 # Python 替代方式，选择其中一种运行时即可
@@ -87,14 +94,10 @@ node scripts/notify-send.js --platform feishu text "任务已完成" --dry-run
 python3 scripts/notify-send --platform wecom text "任务已完成" --dry-run
 ```
 
-**2. 创建自己的配置。** 以下 macOS/Linux 命令不会覆盖已有配置：
+**2. 创建自己的配置。** 各系统使用相同初始化命令；已有配置会报错并保留，跳过此步即可：
 
 ```bash
-mkdir -p "$HOME/.config/notify-bot"
-if [ ! -e "$HOME/.config/notify-bot/config.json" ]; then
-  (umask 077; cp examples/config.example.json "$HOME/.config/notify-bot/config.json")
-fi
-chmod 600 "$HOME/.config/notify-bot/config.json"
+node scripts/notify-send.js --init-config
 ```
 
 用编辑器打开配置，将 `REPLACE_ME_*` 替换为你自己的 webhook。示例展示两个平台各两个命名群；不需要的条目或平台可以删除。飞书启用签名校验时，在对应目标中添加 `"secret": "你的签名密钥"`。配置必须保存在源码目录外，不随安装包或 Git 提交分发。

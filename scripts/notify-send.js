@@ -42,6 +42,18 @@ function parseJson(text, label) {
   catch { fail(`JSON 解析失败：${label}（内容已隐藏）`); }
 }
 
+function configLocation(args) {
+  const source = args.config ? 'argument' : envValue('NOTIFY_CONFIG_FILE') ? 'environment' : 'default';
+  return { path: path.resolve(args.config || envValue('NOTIFY_CONFIG_FILE') ||
+    path.join(os.homedir(), '.config/notify-bot/config.json')), source };
+}
+
+function configError(status, message) {
+  const error = new NotifyError(message);
+  error.configStatus = status;
+  throw error;
+}
+
 function readConfig(file) {
   const location = path.resolve(file);
   let source, stat;
@@ -49,12 +61,77 @@ function readConfig(file) {
     stat = fs.statSync(location);
     source = fs.readFileSync(location, 'utf8');
   } catch (error) {
-    fail(`${error.code === 'ENOENT' ? '配置文件不存在' : '无法读取配置文件'}：${location}`);
+    if (error.code === 'ENOENT') configError('missing', `配置文件不存在：${location}；可运行 --init-config 创建模板`);
+    if (['EACCES', 'EPERM'].includes(error.code)) configError('permission_denied', `无权读取配置文件：${location}；请检查文件 ACL/权限及终端沙箱授权`);
+    configError('unreadable', `无法读取配置文件：${location}；请确认路径指向可读的 UTF-8 文件`);
   }
   if (process.platform !== 'win32' && (stat.mode & 0o077)) {
-    console.error('警告：配置文件包含组/其他用户权限，建议 chmod 600；脚本未修改权限');
+    console.error('警告：配置文件包含组/其他用户权限；POSIX 文件建议 chmod 600，WSL 挂载的 Windows 文件请检查 Windows ACL；脚本未修改权限');
   }
-  return parseJson(source, `配置文件 ${location}`);
+  try { return JSON.parse(source.replace(/^\uFEFF/, '')); }
+  catch { configError('invalid_json', `配置文件 JSON 格式错误：${location}；请使用 UTF-8 并检查 JSON 语法（内容已隐藏）`); }
+}
+
+function configCatalog(config) {
+  if (!isObject(config)) fail('配置需要按 feishu/wecom 分组的对象');
+  if (Object.hasOwn(config, 'targets')) fail('旧 targets 配置需要迁移为 feishu/wecom 分组');
+  const catalog = [];
+  for (const [platform, group] of Object.entries(config)) {
+    if (!['feishu', 'wecom'].includes(platform) || !isObject(group)) fail('配置平台仅支持 feishu/wecom，且分组必须是对象');
+    for (const [name, entry] of Object.entries(group)) {
+      if (!name.trim() || /[:\x00-\x1f\x7f]/.test(name) || !isObject(entry)) fail('目标名称不能为空或含冒号/控制字符，目标配置必须是对象');
+      catalog.push({ name, platform, entry });
+    }
+  }
+  return catalog;
+}
+
+function validateEntry({ platform, entry }) {
+  if (typeof entry.url !== 'string') fail('目标必须包含 url 字符串');
+  if (detectPlatform(entry.url) !== platform) fail('目标 URL 与所在平台分组不匹配');
+  if (entry.secret !== undefined && typeof entry.secret !== 'string') fail('目标 secret 必须是字符串');
+  if (platform !== 'feishu' && entry.secret) fail('secret 仅飞书支持');
+}
+
+function initConfig(args) {
+  const location = configLocation(args);
+  const template = { feishu: {}, wecom: {} };
+  for (const [name, suffix] of [['工作群', 'WORK'], ['告警群', 'ALERTS']]) {
+    template.feishu[name] = { url: `https://open.feishu.cn/open-apis/bot/v2/hook/REPLACE_ME_FEISHU_${suffix}` };
+    template.wecom[name] = { url: `https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key=REPLACE_ME_WECOM_${suffix}` };
+  }
+  try {
+    fs.mkdirSync(path.dirname(location.path), { recursive: true, mode: 0o700 });
+    fs.writeFileSync(location.path, JSON.stringify(template, null, 2) + '\n', { flag: 'wx', mode: 0o600 });
+  } catch (error) {
+    if (error.code === 'EEXIST') fail(`配置已存在，未覆盖：${location.path}`);
+    if (['EACCES', 'EPERM'].includes(error.code)) fail(`无权创建配置：${location.path}；请检查目录权限及终端沙箱授权`);
+    fail(`无法创建配置：${location.path}；请检查目录及磁盘状态`);
+  }
+  console.log(JSON.stringify({ ...location, status: 'created', next: '编辑模板中的 REPLACE_ME 地址，删除不用的目标，再运行 --doctor；尚未发送消息' }, null, 2));
+}
+
+function doctor(args) {
+  const config = { ...configLocation(args), status: 'ok', targets: [] };
+  try {
+    const catalog = configCatalog(readConfig(config.path));
+    for (const target of catalog) validateEntry(target);
+    config.targets = catalog.map(({ name, platform }) => ({ name, platform }));
+    if (!catalog.length || catalog.some(({ entry }) => entry.url.includes('REPLACE_ME'))) {
+      config.status = 'incomplete';
+      config.message = '请填写真实 webhook 并删除不用的占位目标；尚未验证网络或凭证有效性';
+    }
+  } catch (error) {
+    config.status = error.configStatus || 'invalid_config';
+    config.message = error instanceof NotifyError ? error.message : '配置检查失败（详情已隐藏）';
+  }
+  console.log(JSON.stringify({
+    runtime: { name: 'node', version: process.versions.node, platform: process.platform, executable: process.execPath, home: os.homedir() },
+    environment: { wsl_kernel: process.platform === 'linux' && /microsoft/i.test(os.release()),
+      wsl_environment: Boolean(envValue('WSL_DISTRO_NAME') || envValue('WSL_INTEROP')), msystem: envValue('MSYSTEM') || null },
+    config, network_checked: false,
+  }, null, 2));
+  process.exitCode = config.status === 'ok' ? 0 : 2;
 }
 
 function platformMessage(result, url, secret = '') {
@@ -73,18 +150,7 @@ function platformMessage(result, url, secret = '') {
 function resolveTargets(args) {
   if (args.target.length || args.listTargets) {
     if (args.url) fail('--target/--list-targets 不能与 --url 混用');
-    const file = args.config || envValue('NOTIFY_CONFIG_FILE') || path.join(os.homedir(), '.config/notify-bot/config.json');
-    const config = readConfig(file);
-    if (!isObject(config)) fail('配置需要按 feishu/wecom 分组的对象');
-    if (Object.hasOwn(config, 'targets')) fail('旧 targets 配置需要迁移为 feishu/wecom 分组');
-    const catalog = [];
-    for (const [platform, group] of Object.entries(config)) {
-      if (!['feishu', 'wecom'].includes(platform) || !isObject(group)) fail('配置平台仅支持 feishu/wecom，且分组必须是对象');
-      for (const [name, entry] of Object.entries(group)) {
-        if (!name.trim() || /[:\x00-\x1f\x7f]/.test(name) || !isObject(entry)) fail('目标名称不能为空或含冒号/控制字符，目标配置必须是对象');
-        catalog.push({ name, platform, entry });
-      }
-    }
+    const catalog = configCatalog(readConfig(configLocation(args).path));
     if (args.listTargets) {
       return catalog.filter(target => !args.platform || target.platform === args.platform)
         .map(({ name, platform }) => ({ name, platform }));
@@ -105,10 +171,8 @@ function resolveTargets(args) {
       if (matches.length > 1) fail('目标名称在多个平台存在，请指定 --platform 或使用 平台:名称');
       const selected = matches[0];
       const entry = selected.entry;
-      if (typeof entry.url !== 'string') fail('目标必须包含 url 字符串');
-      if (detectPlatform(entry.url) !== selected.platform) fail('目标 URL 与所在平台分组不匹配');
-      if (entry.secret !== undefined && typeof entry.secret !== 'string') fail('目标 secret 必须是字符串');
-      if (selected.platform !== 'feishu' && entry.secret) fail('secret 仅飞书支持');
+      validateEntry(selected);
+      if (!args.dryRun && entry.url.includes('REPLACE_ME')) fail('目标仍含 REPLACE_ME 占位地址，请先编辑配置；未发送消息');
       // Named targets never inherit another bot's global signing secret.
       return { name: selected.name, platform: selected.platform, url: entry.url, secret: entry.secret || '' };
     });
@@ -352,7 +416,7 @@ async function wecomUpload(webhook, type, filePath, args) {
 
 function parseArgs(argv) {
   const valueOptions = new Set(['--url', '--platform', '--at', '--at-mobile', '--title', '--color', '--target', '--config', '--retry', '--body-file']);
-  const booleanOptions = new Set(['--at-all', '--dry-run', '--insecure', '--list-targets', '--help']);
+  const booleanOptions = new Set(['--at-all', '--dry-run', '--insecure', '--list-targets', '--init-config', '--doctor', '--help']);
   const args = {
     cmd: null, positional: [], at: [], atMobile: [], atAll: false,
     target: [], config: null, retry: 0, bodyFile: null, insecure: false, listTargets: false, help: false,
@@ -372,6 +436,8 @@ function parseArgs(argv) {
         if (token === '--at-all') args.atAll = true;
         else if (token === '--dry-run') args.dryRun = true;
         else if (token === '--list-targets') args.listTargets = true;
+        else if (token === '--init-config') args.initConfig = true;
+        else if (token === '--doctor') args.doctor = true;
         else if (token === '--help') args.help = true;
         else args.insecure = true;
         continue;
@@ -452,8 +518,14 @@ async function main(argv = process.argv.slice(2)) {
   const args = parseArgs(argv);
   if (args.help) {
     console.log('notify-send [--platform feishu/wecom] [--target 名称或平台:名称（可重复） | --url URL] <text/md/image/file/voice/news/card/post/raw> [正文]' +
+      '\n离线管理：--init-config 或 --doctor（仅可搭配 --config FILE）' +
       '\n选项：--config FILE --list-targets --dry-run --body-file FILE（- 表示 stdin） --retry 0..5 --insecure\n正文以 - 开头时可用 -- 分隔。');
     return;
+  }
+  if (args.initConfig || args.doctor) {
+    const mode = args.initConfig ? '--init-config' : '--doctor';
+    if (args.cmd || [...args.used].some(option => ![mode, '--config'].includes(option))) fail(`${mode} 只接受 --config`);
+    return args.initConfig ? initConfig(args) : doctor(args);
   }
   if (!/^\d+$/.test(String(args.retry)) || Number(args.retry) > 5) fail('--retry 必须为 0–5 的整数（额外尝试次数）');
   args.retry = Number(args.retry);

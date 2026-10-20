@@ -30,7 +30,8 @@ def main():
             [node, "tests/test_transport.js"],
         ]
         for command in commands:
-            result = subprocess.run(command, cwd=ROOT, env=env, timeout=180)
+            # CLI/setup parity launches many fresh processes; allow slower Windows hosts.
+            result = subprocess.run(command, cwd=ROOT, env=env, timeout=300)
             if result.returncode:
                 return result.returncode
     print("All offline tests passed.")

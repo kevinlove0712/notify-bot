@@ -9,6 +9,8 @@ description: 通过飞书或企业微信群机器人 webhook 发送文本、Mark
 
 ## 执行规则
 
+- 首次使用或环境不清楚时运行 `--doctor`，读取实际运行时、配置路径和状态；它不联网、不显示 webhook/密钥。`missing` 时向用户说明固定全局位置，可用 `--init-config` 创建模板，引导填写地址并删除不用的目标；已有文件不覆盖。初始化、诊断、发送不能放在同一次 CLI 调用中。
+- 不凭终端名称判断运行环境：Git Bash 可运行 Windows Node/Python，WSL 也可能调用 Windows exe。以 `--doctor` 的 `runtime.platform/executable/home` 为准；环境标记只是线索。WSL 共享 Windows 配置需明确建立链接或传 `--config`，不扫描磁盘猜用户名。多 Agent 共享安装见[环境与共享安装](references/setup.md)。
 - 仅在用户明确要求发送时真实发送；审查、格式试验使用 `--dry-run`。webhook 不能读取/回复群消息或撤回已发消息。
 - 发送前选择一个运行时：优先 Node.js 18+；不可用时用 Python 3.10+。Node 执行 `scripts/notify-send.js`，Python 执行 `scripts/notify-send`。发送结果未知时不得换另一版或 curl 重发。
 - Windows 使用 `node` 或 `python`（也可 `py -3`）显式启动脚本，不依赖 shebang；默认配置在 `%USERPROFILE%\.config\notify-bot\config.json`。文件/stdin 输入与输出均按 UTF-8；PowerShell 中文、多行正文优先 `--body-file`，具体配置步骤见[Windows 使用说明](USER_GUIDE.md#windows-与-powershell)。
@@ -48,7 +50,8 @@ python3 "<skill目录>/scripts/notify-send" --platform wecom --target 工作群 
 ## 按需读取
 
 - **附件、卡片、富文本、提醒成员或复杂 Markdown**：读 [CLI 参考](references/cli-reference.md) 的“平台能力与限制”和“格式选择与输入差异”。平台 JSON、图片参数和用户 ID 不可互换。
-- **创建/修改配置、迁移旧配置、兼容环境变量**：读 [CLI 参考](references/cli-reference.md) 的“配置与目标”。不修改用户 shell 配置；不要用真实发送验证配置。
+- **首次配置、共享安装、WSL 或权限/TLS 排错**：读[环境与共享安装](references/setup.md)。初始化模板不是有效凭证；离线诊断通过不代表网络或平台验证通过。真实测试须有用户授权。
+- **创建/修改配置、迁移旧配置、兼容环境变量**：读 [CLI 参考](references/cli-reference.md) 的“配置与目标”。不修改用户 shell 配置；不用真实发送作为默认配置检查。
 - **失败、限流、TLS 或调用方集成**：读 [CLI 参考](references/cli-reference.md) 的“响应、重试与退出码”。`--dry-run` 只能预览数据，不能验证群内渲染。
 - **用户询问安装使用、Node/Python/HTTP 原理、完整命令示例**：读 [人类使用指南](USER_GUIDE.md)。普通发送不需要加载此指南。
 

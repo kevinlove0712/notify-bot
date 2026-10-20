@@ -6,6 +6,7 @@ import hashlib
 import hmac
 import json
 import os
+import platform as runtime_platform
 import re
 import secrets
 import ssl
@@ -74,6 +75,18 @@ def encode_payload(payload):
     return json.dumps(payload, ensure_ascii=False, separators=(",", ":")).encode("utf-8")
 
 
+def config_location(args):
+    source = "argument" if args.config else "environment" if env_value("NOTIFY_CONFIG_FILE") else "default"
+    return {"path": os.path.abspath(args.config or env_value("NOTIFY_CONFIG_FILE") or
+                                   os.path.expanduser("~/.config/notify-bot/config.json")), "source": source}
+
+
+def config_error(status, message):
+    error = NotifyError(message)
+    error.config_status = status
+    raise error
+
+
 def read_config(file):
     location = os.path.abspath(file)
     try:
@@ -81,12 +94,93 @@ def read_config(file):
         with open(location, encoding="utf-8-sig") as stream:
             source = stream.read()
     except FileNotFoundError:
-        fail(f"配置文件不存在：{location}")
+        config_error("missing", f"配置文件不存在：{location}；可运行 --init-config 创建模板")
+    except PermissionError:
+        config_error("permission_denied", f"无权读取配置文件：{location}；请检查文件 ACL/权限及终端沙箱授权")
     except (OSError, UnicodeError):
-        fail(f"无法读取配置文件：{location}")
+        config_error("unreadable", f"无法读取配置文件：{location}；请确认路径指向可读的 UTF-8 文件")
     if os.name == "posix" and info.st_mode & 0o077:
-        print("警告：配置文件包含组/其他用户权限，建议 chmod 600；脚本未修改权限", file=sys.stderr)
-    return parse_json(source, f"配置文件 {location}")
+        print("警告：配置文件包含组/其他用户权限；POSIX 文件建议 chmod 600，WSL 挂载的 Windows 文件请检查 Windows ACL；脚本未修改权限", file=sys.stderr)
+    try:
+        return parse_json(source, f"配置文件 {location}")
+    except NotifyError:
+        config_error("invalid_json", f"配置文件 JSON 格式错误：{location}；请使用 UTF-8 并检查 JSON 语法（内容已隐藏）")
+
+
+def config_catalog(config):
+    if not isinstance(config, dict):
+        fail("配置需要按 feishu/wecom 分组的对象")
+    if "targets" in config:
+        fail("旧 targets 配置需要迁移为 feishu/wecom 分组")
+    catalog = []
+    for platform, group in config.items():
+        if platform not in ("feishu", "wecom") or not isinstance(group, dict):
+            fail("配置平台仅支持 feishu/wecom，且分组必须是对象")
+        for name, entry in group.items():
+            if not name.strip() or re.search(r"[:\x00-\x1f\x7f]", name) or not isinstance(entry, dict):
+                fail("目标名称不能为空或含冒号/控制字符，目标配置必须是对象")
+            catalog.append({"name": name, "platform": platform, "entry": entry})
+    return catalog
+
+
+def validate_entry(target):
+    entry, platform = target["entry"], target["platform"]
+    if not isinstance(entry.get("url"), str):
+        fail("目标必须包含 url 字符串")
+    if detect_platform(entry["url"]) != platform:
+        fail("目标 URL 与所在平台分组不匹配")
+    if "secret" in entry and not isinstance(entry["secret"], str):
+        fail("目标 secret 必须是字符串")
+    if platform != "feishu" and entry.get("secret"):
+        fail("secret 仅飞书支持")
+
+
+def init_config(args):
+    location = config_location(args)
+    template = {"feishu": {}, "wecom": {}}
+    for name, suffix in (("工作群", "WORK"), ("告警群", "ALERTS")):
+        template["feishu"][name] = {"url": f"https://open.feishu.cn/open-apis/bot/v2/hook/REPLACE_ME_FEISHU_{suffix}"}
+        template["wecom"][name] = {"url": f"https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key=REPLACE_ME_WECOM_{suffix}"}
+    try:
+        os.makedirs(os.path.dirname(location["path"]), mode=0o700, exist_ok=True)
+        # O_EXCL also refuses existing or dangling symlinks.
+        fd = os.open(location["path"], os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+        with os.fdopen(fd, "w", encoding="utf-8", newline="\n") as stream:
+            stream.write(json.dumps(template, ensure_ascii=False, indent=2) + "\n")
+    except FileExistsError:
+        fail(f"配置已存在，未覆盖：{location['path']}")
+    except PermissionError:
+        fail(f"无权创建配置：{location['path']}；请检查目录权限及终端沙箱授权")
+    except OSError:
+        fail(f"无法创建配置：{location['path']}；请检查目录及磁盘状态")
+    print(json.dumps({**location, "status": "created",
+                      "next": "编辑模板中的 REPLACE_ME 地址，删除不用的目标，再运行 --doctor；尚未发送消息"},
+                     ensure_ascii=False, indent=2))
+    return 0
+
+
+def doctor(args):
+    config = {**config_location(args), "status": "ok", "targets": []}
+    try:
+        catalog = config_catalog(read_config(config["path"]))
+        for target in catalog:
+            validate_entry(target)
+        config["targets"] = [{"name": t["name"], "platform": t["platform"]} for t in catalog]
+        if not catalog or any("REPLACE_ME" in t["entry"]["url"] for t in catalog):
+            config["status"] = "incomplete"
+            config["message"] = "请填写真实 webhook 并删除不用的占位目标；尚未验证网络或凭证有效性"
+    except (NotifyError, OSError, UnicodeError, ValueError) as error:
+        config["status"] = getattr(error, "config_status", "invalid_config")
+        config["message"] = str(error) if isinstance(error, NotifyError) else "配置检查失败（详情已隐藏）"
+    print(json.dumps({
+        "runtime": {"name": "python", "version": runtime_platform.python_version(), "platform": sys.platform,
+                    "executable": sys.executable, "home": os.path.expanduser("~")},
+        "environment": {"wsl_kernel": sys.platform == "linux" and "microsoft" in runtime_platform.release().lower(),
+                        "wsl_environment": bool(env_value("WSL_DISTRO_NAME") or env_value("WSL_INTEROP")),
+                        "msystem": env_value("MSYSTEM") or None},
+        "config": config, "network_checked": False,
+    }, ensure_ascii=False, indent=2))
+    return 0 if config["status"] == "ok" else 2
 
 
 def platform_message(result, url, secret=""):
@@ -109,20 +203,7 @@ def resolve_targets(args):
     if args.target or args.list_targets:
         if args.url:
             fail("--target/--list-targets 不能与 --url 混用")
-        file = args.config or env_value("NOTIFY_CONFIG_FILE") or os.path.expanduser("~/.config/notify-bot/config.json")
-        config = read_config(file)
-        if not isinstance(config, dict):
-            fail("配置需要按 feishu/wecom 分组的对象")
-        if "targets" in config:
-            fail("旧 targets 配置需要迁移为 feishu/wecom 分组")
-        catalog = []
-        for platform, group in config.items():
-            if platform not in ("feishu", "wecom") or not isinstance(group, dict):
-                fail("配置平台仅支持 feishu/wecom，且分组必须是对象")
-            for name, entry in group.items():
-                if not name.strip() or re.search(r"[:\x00-\x1f\x7f]", name) or not isinstance(entry, dict):
-                    fail("目标名称不能为空或含冒号/控制字符，目标配置必须是对象")
-                catalog.append({"name": name, "platform": platform, "entry": entry})
+        catalog = config_catalog(read_config(config_location(args)["path"]))
         if args.list_targets:
             return [{"name": target["name"], "platform": target["platform"]} for target in catalog
                     if not args.platform or target["platform"] == args.platform]
@@ -144,14 +225,9 @@ def resolve_targets(args):
                 fail("目标名称在多个平台存在，请指定 --platform 或使用 平台:名称")
             selected = matches[0]
             entry = selected["entry"]
-            if not isinstance(entry.get("url"), str):
-                fail("目标必须包含 url 字符串")
-            if detect_platform(entry["url"]) != selected["platform"]:
-                fail("目标 URL 与所在平台分组不匹配")
-            if "secret" in entry and not isinstance(entry["secret"], str):
-                fail("目标 secret 必须是字符串")
-            if selected["platform"] != "feishu" and entry.get("secret"):
-                fail("secret 仅飞书支持")
+            validate_entry(selected)
+            if not args.dry_run and "REPLACE_ME" in entry["url"]:
+                fail("目标仍含 REPLACE_ME 占位地址，请先编辑配置；未发送消息")
             targets.append({"name": selected["name"], "platform": selected["platform"], "url": entry["url"],
                             "secret": entry.get("secret", "")})
         if len({webhook_identity(target["url"]) for target in targets}) != len(targets):
@@ -477,11 +553,11 @@ def wecom_upload(webhook, media_type, file_path, args):
 def parse_args(argv):
     value_options = {"--url", "--platform", "--at", "--at-mobile", "--title", "--color",
                      "--target", "--config", "--retry", "--body-file"}
-    boolean_options = {"--at-all", "--dry-run", "--insecure", "--list-targets", "--help"}
+    boolean_options = {"--at-all", "--dry-run", "--insecure", "--list-targets", "--init-config", "--doctor", "--help"}
     args = SimpleNamespace(cmd=None, positional=[], at=[], at_mobile=[], at_all=False,
                            dry_run=False, platform=None, url=None, title=None, color=None, used=set(),
                            target=[], config=None, retry="0", body_file=None, insecure=False,
-                           list_targets=False, help=False)
+                           list_targets=False, init_config=False, doctor=False, help=False)
     parse_options = True
     index = 0
     while index < len(argv):
@@ -572,9 +648,15 @@ def main(argv=None):
     if args.help:
         print("notify-send [--platform feishu/wecom] [--target 名称或平台:名称（可重复） | --url URL] "
               "<text/md/image/file/voice/news/card/post/raw> [正文]\n"
+              "离线管理：--init-config 或 --doctor（仅可搭配 --config FILE）\n"
               "选项：--config FILE --list-targets --dry-run --body-file FILE（- 表示 stdin） "
               "--retry 0..5 --insecure\n正文以 - 开头时可用 -- 分隔。")
         return 0
+    if args.init_config or args.doctor:
+        mode = "--init-config" if args.init_config else "--doctor"
+        if args.cmd or args.used - {mode, "--config"}:
+            fail(f"{mode} 只接受 --config")
+        return init_config(args) if args.init_config else doctor(args)
     if not re.fullmatch(r"[0-9]+", args.retry) or int(args.retry) > 5:
         fail("--retry 必须为 0–5 的整数（额外尝试次数）")
     args.retry = int(args.retry)

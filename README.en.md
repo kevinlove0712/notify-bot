@@ -45,6 +45,20 @@ The [skills CLI](https://github.com/vercel-labs/skills#install-a-skill) currentl
 
 For manual installation, place the complete directory in your agent's supported skills directory. Preserve the relative locations of `SKILL.md`, `scripts/`, and the documentation. The agent instructions and detailed reference are currently in Chinese.
 
+### Shared global installation and first use
+
+Install this local bundle once for multiple agents:
+
+```bash
+node scripts/install-shared.js --claude
+```
+
+The primary copy lives at `~/.agents/skills/notify-bot`; the optional Claude entry links to it. Existing conflicting destinations are refused. Run `node scripts/notify-send.js --init-config` separately to create a UTF-8 template at `~/.config/notify-bot/config.json` (under the Windows user profile for native runtimes). Existing files and symlinks are never overwritten. Replace placeholder webhooks in your editor and remove unused targets, then run `node scripts/notify-send.js --doctor`. The Python CLI accepts the same options.
+
+Doctor reports the actual runtime, executable, home, selected configuration path/source, and target names without network requests or webhook/secrets. Status `ok` exits 0; missing/unreadable/invalid/incomplete configuration exits 2. It does not validate remote credentials. A real named-target send refuses `REPLACE_ME` addresses. These management modes accept only an optional `--config FILE`; precedence remains argument > `NOTIFY_CONFIG_FILE` > default.
+
+Git Bash can run Windows executables, and WSL can launch Windows `.exe` files: use the reported runtime rather than guessing from the shell name. To share Windows files from WSL, run the installer in WSL with explicit `--link-source /mnt/c/.../notify-bot --shared-config /mnt/c/.../config.json --claude`; it creates links instead of duplicating credentials. See [setup details (Chinese)](references/setup.md). These features belong to the current development version, not `v0.1.0`.
+
 ### Windows / PowerShell
 
 Windows compatibility is currently on `main`, not in `v0.1.0`. Omit `--branch v0.1.0 --depth 1` when cloning, or use the skills CLI above. If PowerShell blocks `npx.ps1`, run `npx.cmd skills add kevinlove0712/notify-bot --skill notify-bot`; no execution-policy change is needed.
@@ -52,12 +66,7 @@ Windows compatibility is currently on `main`, not in `v0.1.0`. Omit `--branch v0
 PowerShell 7 is recommended. Run these commands from the repository root; an existing configuration is preserved:
 
 ```powershell
-$notifyDir = Join-Path $env:USERPROFILE '.config\notify-bot'
-$notifyConfig = Join-Path $notifyDir 'config.json'
-New-Item -ItemType Directory -Force -Path $notifyDir | Out-Null
-if (-not (Test-Path -LiteralPath $notifyConfig)) {
-    Copy-Item -LiteralPath '.\examples\config.example.json' -Destination $notifyConfig
-}
+node .\scripts\notify-send.js --init-config
 node .\scripts\notify-send.js --list-targets
 node .\scripts\notify-send.js --platform wecom text 'Preview' --dry-run
 # Python alternative; choose one runtime
@@ -79,14 +88,10 @@ node scripts/notify-send.js --platform feishu text "Task complete" --dry-run
 python3 scripts/notify-send --platform wecom text "Task complete" --dry-run
 ```
 
-**2. Create a private configuration.** On Windows, use the PowerShell steps above. These macOS/Linux commands preserve an existing configuration:
+**2. Create a private configuration.** The same command works across platforms. An existing file is preserved and returns an error; existing users can skip initialization:
 
 ```bash
-mkdir -p "$HOME/.config/notify-bot"
-if [ ! -e "$HOME/.config/notify-bot/config.json" ]; then
-  (umask 077; cp examples/config.example.json "$HOME/.config/notify-bot/config.json")
-fi
-chmod 600 "$HOME/.config/notify-bot/config.json"
+node scripts/notify-send.js --init-config
 ```
 
 Open that file in your editor and replace `REPLACE_ME_*` with your own webhooks. The structure is **platform → target name → `url` / optional `secret`**. Remove unused targets or platforms. If a Feishu bot requires signing, add its signing key as `secret` on that target. Keep real configuration outside this repository.

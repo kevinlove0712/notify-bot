@@ -50,6 +50,9 @@ def main():
 
 
 if __name__ == "__main__":
+    # curl config passed through a binary pipe must stay UTF-8 on Windows too.
+    sys.stdout.reconfigure(encoding="utf-8", newline="\n")
+    sys.stderr.reconfigure(encoding="utf-8", newline="\n")
     try:
         main()
     except bot.NotifyError as error:

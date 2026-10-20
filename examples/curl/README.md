@@ -6,6 +6,10 @@
 
 它们用于理解接口与手工联调：每次只选择一个命名目标、发送一条文本，不提供完整 CLI 的多目标、附件、业务码分类或限流重试。日常自动通知仍优先使用 Node/Python CLI。
 
+Windows 不等于没有 curl：先用 `Get-Command curl.exe`、`curl.exe --version` 确认可执行文件及 TLS 后端。PowerShell 的 `curl` 可能是别名；现有 `.sh` 文件仍须在 Bash 中运行。不要在 PowerShell 5.1 用普通文本管道传递含中文的 curl 配置，编码可能改变。WSL/Linux 的 Bash 示例和 Windows 原生 `curl.exe` 应分别验证；不根据 shell 名称猜运行时或 home。
+
+初次配置与路径诊断用主 CLI 的 `--init-config`、`--doctor`，详见[环境与共享安装](../../references/setup.md)。若仅 Agent 受限终端出现 Schannel `SEC_E_NO_CREDENTIALS`，应比较宿主终端和 Agent 权限上下文；公开域名返回 HTTP 404 说明该次 TLS/HTTP 请求完成，不证明机器人 POST 成功。不要自动关闭证书校验或在结果未知时换方式重发。
+
 ## 配置与运行
 
 使用同一个 [分组配置](../config.example.json)，真实配置存放在仓库外。文件路径优先级为 `--config FILE` > `NOTIFY_CONFIG_FILE` > `~/.config/notify-bot/config.json`。飞书签名密钥放在对应目标的 `secret` 字段，无签名机器人则省略。
