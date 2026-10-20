@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## [v0.2.0](https://github.com/kevinlove0712/notify-bot/compare/v0.1.0...v0.2.0) — 2026-10-20
 
 - 修复共享安装器夹带源码目录私有文件的问题：仅复制明确列出的发布文件，安装前拒绝清单内的符号链接，并补充离线回归测试。
 - 新增 Node/Python 对齐的 `--init-config` 与离线 `--doctor`：固定全局路径、拒绝覆盖、运行时与配置来源诊断、分类错误、凭证隐藏及占位地址发送保护。
@@ -9,6 +9,7 @@
 - 支持原生 Windows 的 Node/Python CLI，新增两组 Windows CI；curl 示例继续仅在 macOS/Linux Bash 环境验证。
 - 接受带 BOM 的 UTF-8 配置与输入文件，正文保留原始换行，Python 标准输出/错误与 stdin 统一使用 UTF-8。
 - 增加编码与中文路径回归测试，以及中英文 PowerShell 安装、配置与调用说明。
+- 中英文 README 增加 skills.sh 安装方式、链接与安装徽章。
 
 ## [v0.1.0](https://github.com/kevinlove0712/notify-bot/releases/tag/v0.1.0) — 2026-10-19
 

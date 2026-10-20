@@ -22,14 +22,14 @@ Independent Node.js and Python clients share the same CLI and configuration form
 Use Node.js 18+ **or** Python 3.10+; prefer a currently maintained runtime. The Node/Python CLI supports macOS, Linux, and Windows, with CI coverage for all three. The full test suite needs both runtimes. The Bash curl examples are tested only on macOS/Linux.
 
 ```bash
-git clone --branch v0.1.0 --depth 1 https://github.com/kevinlove0712/notify-bot.git
+git clone --branch v0.2.0 --depth 1 https://github.com/kevinlove0712/notify-bot.git
 cd notify-bot
 node scripts/notify-send.js --help
 # Python alternative:
 python3 scripts/notify-send --help
 ```
 
-No `npm install` or `pip install` is needed. You can also download versioned source archives from [Releases](https://github.com/kevinlove0712/notify-bot/releases). Omit `--branch v0.1.0 --depth 1` to clone the development branch.
+No `npm install` or `pip install` is needed. You can also download the [v0.2.0 source archive](https://github.com/kevinlove0712/notify-bot/archive/refs/tags/v0.2.0.zip). Omit `--branch v0.2.0 --depth 1` to clone the development branch.
 
 ### Install as an agent skill with the skills CLI
 
@@ -41,7 +41,7 @@ Run this from the project where you want to use the skill, then choose your agen
 npx skills add kevinlove0712/notify-bot --skill notify-bot
 ```
 
-The [skills CLI](https://github.com/vercel-labs/skills#install-a-skill) currently requires Node.js 22.20+. This requirement applies to the installer; notify-bot itself still supports Node.js 18+ or Python 3.10+. Installation is project-local by default; add `-g` for a global installation. This command installs the current contents of the repository's default branch. Use the versioned clone above to pin `v0.1.0`. Back up an existing skill before replacing it.
+The [skills CLI](https://github.com/vercel-labs/skills#install-a-skill) currently requires Node.js 22.20+. This requirement applies to the installer; notify-bot itself still supports Node.js 18+ or Python 3.10+. Installation is project-local by default; add `-g` for a global installation. This command installs the current contents of the repository's default branch. Use the versioned clone above to pin `v0.2.0`. Back up an existing skill before replacing it.
 
 For manual installation, place the complete directory in your agent's supported skills directory. Preserve the relative locations of `SKILL.md`, `scripts/`, and the documentation. The agent instructions and detailed reference are currently in Chinese.
 
@@ -59,11 +59,11 @@ The primary copy lives at `~/.agents/skills/notify-bot`; the optional Claude ent
 
 Doctor reports the actual runtime, executable, home, selected configuration path/source, and target names without network requests or webhook/secrets. Status `ok` exits 0; missing/unreadable/invalid/incomplete configuration exits 2. It does not validate remote credentials. A real named-target send refuses `REPLACE_ME` addresses. These management modes accept only an optional `--config FILE`; precedence remains argument > `NOTIFY_CONFIG_FILE` > default.
 
-Git Bash can run Windows executables, and WSL can launch Windows `.exe` files: use the reported runtime rather than guessing from the shell name. To share Windows files from WSL, run the installer in WSL with explicit `--link-source /mnt/c/.../notify-bot --shared-config /mnt/c/.../config.json --claude`; it creates links instead of duplicating credentials. See [setup details (Chinese)](references/setup.md). These features belong to the current development version, not `v0.1.0`.
+Git Bash can run Windows executables, and WSL can launch Windows `.exe` files: use the reported runtime rather than guessing from the shell name. To share Windows files from WSL, run the installer in WSL with explicit `--link-source /mnt/c/.../notify-bot --shared-config /mnt/c/.../config.json --claude`; it creates links instead of duplicating credentials. See [setup details (Chinese)](references/setup.md). These features are available starting with `v0.2.0`.
 
 ### Windows / PowerShell
 
-Windows compatibility is currently on `main`, not in `v0.1.0`. Omit `--branch v0.1.0 --depth 1` when cloning, or use the skills CLI above. If PowerShell blocks `npx.ps1`, run `npx.cmd skills add kevinlove0712/notify-bot --skill notify-bot`; no execution-policy change is needed.
+Windows Node/Python support is available starting with `v0.2.0`. Use the versioned clone command or the skills CLI above. If PowerShell blocks `npx.ps1`, run `npx.cmd skills add kevinlove0712/notify-bot --skill notify-bot`; no execution-policy change is needed.
 
 PowerShell 7 is recommended. Run these commands from the repository root; an existing configuration is preserved:
 
