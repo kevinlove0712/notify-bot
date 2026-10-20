@@ -34,11 +34,11 @@ function fail(message, exitCode = 2) { throw new NotifyError(message, exitCode);
 function envValue(key) { return process.env[key] || ''; }
 function isObject(value) { return value !== null && typeof value === 'object' && !Array.isArray(value); }
 function readText(file) {
-  try { return fs.readFileSync(file === '-' ? 0 : file, 'utf8'); }
+  try { return fs.readFileSync(file === '-' ? 0 : file, 'utf8').replace(/^\uFEFF/, ''); }
   catch { fail('无法读取输入文件（路径及内容已隐藏）'); }
 }
 function parseJson(text, label) {
-  try { return JSON.parse(text); }
+  try { return JSON.parse(text.replace(/^\uFEFF/, '')); }
   catch { fail(`JSON 解析失败：${label}（内容已隐藏）`); }
 }
 

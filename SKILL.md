@@ -11,6 +11,7 @@ description: 通过飞书或企业微信群机器人 webhook 发送文本、Mark
 
 - 仅在用户明确要求发送时真实发送；审查、格式试验使用 `--dry-run`。webhook 不能读取/回复群消息或撤回已发消息。
 - 发送前选择一个运行时：优先 Node.js 18+；不可用时用 Python 3.10+。Node 执行 `scripts/notify-send.js`，Python 执行 `scripts/notify-send`。发送结果未知时不得换另一版或 curl 重发。
+- Windows 使用 `node` 或 `python`（也可 `py -3`）显式启动脚本，不依赖 shebang；默认配置在 `%USERPROFILE%\.config\notify-bot\config.json`。文件/stdin 输入与输出均按 UTF-8；PowerShell 中文、多行正文优先 `--body-file`，具体配置步骤见[Windows 使用说明](USER_GUIDE.md#windows-与-powershell)。
 - 先用 `--list-targets` 查看名称/平台，不打印完整配置或凭证。优先 `--platform 平台 --target 名称`；用户只指定平台且只有一个目标时可选它，多个目标且无法可靠推断时询问。
 - 只发送到用户指定范围：同平台重复 `--target 名称`，跨平台重复 `--target 平台:名称`。没有默认目标或隐式全选，`--target` 与 `--url` 互斥。
 - 多目标只支持 `text`/`md`。跨平台禁止 `--at`，指定成员时分平台调用；`--at-all` 可用于两平台的 `text`。复杂 Markdown 不保证同样渲染，按平台准备正文。
@@ -51,4 +52,4 @@ python3 "<skill目录>/scripts/notify-send" --platform wecom --target 工作群 
 - **失败、限流、TLS 或调用方集成**：读 [CLI 参考](references/cli-reference.md) 的“响应、重试与退出码”。`--dry-run` 只能预览数据，不能验证群内渲染。
 - **用户询问安装使用、Node/Python/HTTP 原理、完整命令示例**：读 [人类使用指南](USER_GUIDE.md)。普通发送不需要加载此指南。
 
-- **用户明确要求直接使用 curl 或了解接口请求**：读 [curl 示例](examples/curl/README.md)。示例仅单目标文本，返回原始响应，不能按主 CLI 的退出码判断；不作为结果未知后的自动备用通道。
+- **用户明确要求直接使用 curl 或了解接口请求**：读 [curl 示例](examples/curl/README.md)。现有示例为 Bash 版，仅在 macOS/Linux 验证，不直接用于原生 PowerShell。示例仅单目标文本，返回原始响应，不能按主 CLI 的退出码判断；不作为结果未知后的自动备用通道。

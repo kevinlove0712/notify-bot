@@ -2,6 +2,8 @@
 
 两份可运行的文本示例：[飞书](feishu-text.sh)、[企业微信](wecom-text.sh)。需要 Bash、curl 和 Python 3.10+。Python 只读取配置、校验输入、编码 JSON 及生成飞书签名，实际 HTTPS 请求由 curl 发出。准备过程复用现有 Python CLI 的函数，不调用它的网络发送函数。
 
+这些 `.sh` 示例仅在 macOS/Linux 验证，不是原生 PowerShell 脚本。Windows 用户使用主项目的 [Node/Python CLI](../../README.md#windows--powershell)；本次 Windows 支持不包括 Bash/curl 示例。
+
 它们用于理解接口与手工联调：每次只选择一个命名目标、发送一条文本，不提供完整 CLI 的多目标、附件、业务码分类或限流重试。日常自动通知仍优先使用 Node/Python CLI。
 
 ## 配置与运行

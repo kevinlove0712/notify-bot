@@ -42,7 +42,7 @@ class CliTests(unittest.TestCase):
 
     def run_cli(self, runtime, args, stdin=None, extra=None):
         return subprocess.run([*runtime, *args], input=stdin, env={**self.env, **(extra or {})},
-                              capture_output=True, text=True, timeout=15)
+                              capture_output=True, text=True, encoding="utf-8", timeout=15)
 
     def both(self, args, code=0, stdin=None, extra=None):
         results = [self.run_cli(runtime, args, stdin, extra) for runtime in RUNTIMES]
@@ -177,7 +177,7 @@ class CliTests(unittest.TestCase):
     def test_body_file_and_stdin(self):
         body = "多行\n`echo no` $(do-not-run) $HOME \' \\\"\n"
         file = self.home / "body.txt"
-        file.write_text(body)
+        file.write_bytes(body.encode("utf-8"))
         for source in [str(file), "-"]:
             result = self.both(["--platform", "wecom", "text", "--dry-run", "--body-file", source], stdin=body)[0]
             self.assertEqual(json.loads(result.stdout)["text"]["content"], body)

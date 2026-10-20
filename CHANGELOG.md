@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+- 支持原生 Windows 的 Node/Python CLI，新增两组 Windows CI；curl 示例继续仅在 macOS/Linux Bash 环境验证。
+- 接受带 BOM 的 UTF-8 配置与输入文件，正文保留原始换行，Python 标准输出/错误与 stdin 统一使用 UTF-8。
+- 增加编码与中文路径回归测试，以及中英文 PowerShell 安装、配置与调用说明。
+
 ## [v0.1.0](https://github.com/kevinlove0712/notify-bot/releases/tag/v0.1.0) — 2026-10-19
 
 首个公开版本 / First public release.

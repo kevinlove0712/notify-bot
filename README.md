@@ -20,7 +20,7 @@ Node.js / Python 双实现，无需安装第三方运行依赖。两版通过 HT
 
 ## 环境与安装
 
-运行时任选其一：Node.js 18+，或 Python 3.10+。建议使用仍受维护的运行时版本。完整测试需要同时安装 Node 和 Python。主要使用与验证环境为 macOS/Linux；Windows 尚未验证。
+运行时任选其一：Node.js 18+，或 Python 3.10+。建议使用仍受维护的运行时版本。Node/Python 主 CLI 支持 macOS、Linux 和 Windows，CI 覆盖这三个系统。完整测试需要同时安装 Node 和 Python；curl 示例仅在 macOS/Linux 的 Bash 环境验证。
 
 克隆仓库，或下载源码并解压为 `notify-bot` 目录。无需 `npm install` 或 `pip install`：
 
@@ -52,6 +52,29 @@ npx skills add kevinlove0712/notify-bot --skill notify-bot
 [skills CLI](https://github.com/vercel-labs/skills#install-a-skill) 当前需要 Node.js 22.20+；这是安装器的要求，notify-bot 本身仍可使用 Node.js 18+ 或 Python 3.10+。默认安装到当前项目，添加 `-g` 可全局安装。此命令安装仓库默认分支的当前内容；需要固定 `v0.1.0` 时，使用上面的版本克隆方式。已有同名 skill 时先备份，避免覆盖本地修改。
 
 手动安装时，将完整目录放入你的 Agent 支持的 skills 目录，保留 `SKILL.md`、`scripts/` 和文档的相对位置。安装位置由所用 Agent 决定；可先用命令行独立试用。
+
+### Windows / PowerShell
+
+Windows 适配目前在 `main`，尚未包含在 `v0.1.0` 中。克隆时省略 `--branch v0.1.0 --depth 1`，或使用上述 skills CLI 安装。若 PowerShell 阻止 `npx.ps1`，使用 `npx.cmd skills add kevinlove0712/notify-bot --skill notify-bot`，无需调整系统执行策略。
+
+推荐 PowerShell 7。以下命令在仓库根目录运行，配置已存在时不会覆盖：
+
+```powershell
+$notifyDir = Join-Path $env:USERPROFILE '.config\notify-bot'
+$notifyConfig = Join-Path $notifyDir 'config.json'
+New-Item -ItemType Directory -Force -Path $notifyDir | Out-Null
+if (-not (Test-Path -LiteralPath $notifyConfig)) {
+    Copy-Item -LiteralPath '.\examples\config.example.json' -Destination $notifyConfig
+}
+node .\scripts\notify-send.js --list-targets
+node .\scripts\notify-send.js --platform wecom text '预览 🙂' --dry-run
+# Python 替代方式，选择其中一种运行时即可
+python .\scripts\notify-send --platform wecom text '预览 🙂' --dry-run
+```
+
+若 Python 安装提供的是 `py` 启动器，可将 `python` 换成 `py -3`，先确认版本至少 3.10。配置默认位于 `%USERPROFILE%\.config\notify-bot\config.json`；Windows 使用文件 ACL，不执行 `chmod`。替换配置占位地址后才可真实发送。
+
+配置、正文和 JSON 文件使用 UTF-8，允许文件开头的 BOM；不支持 UTF-16。中文、emoji 或多行正文优先使用 `--body-file`。Windows PowerShell 5.1 的 `>` 默认写入 UTF-16，管道编码也可能改变正文，详见[Windows 使用说明](USER_GUIDE.md#windows-与-powershell)。两版输出均为 UTF-8；调用程序应按 UTF-8 解码。
 
 ## 快速开始
 

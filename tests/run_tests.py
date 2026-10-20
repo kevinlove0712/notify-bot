@@ -21,7 +21,7 @@ def main():
     env.update(
         PYTHONDONTWRITEBYTECODE="1", PYTHONUTF8="1",
         PYTHONPATH=str(ROOT / "tests/offline"),
-        NODE_OPTIONS="--require " + json.dumps(str(ROOT / "tests/offline/block-network.cjs")),
+        NODE_OPTIONS="--require " + json.dumps((ROOT / "tests/offline/block-network.cjs").as_posix()),
     )
     with tempfile.TemporaryDirectory(prefix="notify-test-home-") as home_dir:
         env.update(HOME=home_dir, USERPROFILE=home_dir)

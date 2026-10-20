@@ -28,6 +28,12 @@ jobs:
           - os: macos-latest
             node: '24'
             python: '3.13'
+          - os: windows-latest
+            node: '18'
+            python: '3.10'
+          - os: windows-latest
+            node: '24'
+            python: '3.13'
     steps:
       - uses: actions/checkout@v7
         with:
@@ -40,4 +46,4 @@ jobs:
         with:
           python-version: ${{ matrix.python }}
       - name: Run offline tests
-        run: python3 tests/run_tests.py
+        run: python tests/run_tests.py

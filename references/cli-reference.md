@@ -6,6 +6,8 @@
 
 默认读取 `~/.config/notify-bot/config.json`。文件位置优先级：`--config FILE` > `NOTIFY_CONFIG_FILE` > 默认路径。文件使用 JSON，不执行 shell 表达式或变量替换。文件不存在会报出实际查找位置；在 POSIX 上，若含组/其他用户权限，stderr 会警告建议设为 `600`，不自动改权限。
 
+Windows 默认路径为 `%USERPROFILE%\.config\notify-bot\config.json`，文件 ACL 不在脚本检查范围内。配置、JSON 和正文输入使用 UTF-8（允许开头的 BOM），stdout/stderr 输出 UTF-8；正文文件/stdin 保留 CRLF/LF 换行，不自动转码 UTF-16。PowerShell 命令与编码注意事项见[使用指南](../USER_GUIDE.md#windows-与-powershell)。
+
 结构为 **平台 → 目标名称 → 地址/签名密钥**。根级平台支持 `feishu`、`wecom`，可只配置其中之一。同平台允许多个地址，不同平台允许同名；每个名称在所在平台内必须唯一。名称精确匹配，支持中文和空格（命令中用引号），不可包含冒号或控制字符。每个目标无需再写 `platform` 字段。
 
 `secret` 仅用于飞书，按目标独立配置，不继承全局签名密钥。替换地址后，平台与名称不变就无需修改发送命令。

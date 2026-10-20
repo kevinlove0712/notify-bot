@@ -30,14 +30,14 @@ class DistributionTests(unittest.TestCase):
         self.env.update(
             HOME=str(self.home), USERPROFILE=str(self.home), PYTHONUTF8="1",
             PYTHONDONTWRITEBYTECODE="1", PYTHONPATH=str(self.bundle / "tests/offline"),
-            NODE_OPTIONS="--require " + json.dumps(str(self.bundle / "tests/offline/block-network.cjs")),
+            NODE_OPTIONS="--require " + json.dumps((self.bundle / "tests/offline/block-network.cjs").as_posix()),
         )
         self.runtimes = (["node", str(self.bundle / "scripts/notify-send.js")],
                          [sys.executable, str(self.bundle / "scripts/notify-send")])
 
     def run_cli(self, runtime, args, expected=0, extra=None):
         result = subprocess.run([*runtime, *args], cwd=self.home, env={**self.env, **(extra or {})},
-                                capture_output=True, text=True, timeout=15)
+                                capture_output=True, text=True, encoding="utf-8", timeout=15)
         self.assertEqual(result.returncode, expected, result.stdout + result.stderr)
         return result
 
@@ -98,7 +98,7 @@ class DistributionTests(unittest.TestCase):
         ]
         for command in snippets:
             result = subprocess.run(command, cwd=self.home, env=self.env, capture_output=True,
-                                    text=True, timeout=15)
+                                    text=True, encoding="utf-8", timeout=15)
             self.assertNotEqual(result.returncode, 0)
             self.assertIn("Real network connections are disabled in tests", result.stderr)
 

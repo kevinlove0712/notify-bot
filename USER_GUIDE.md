@@ -48,6 +48,31 @@ chmod 600 ~/.config/notify-bot/config.json
 
 跨平台发送不能带 `--at`，因为飞书和企微的用户 ID 不通用；需要提醒指定成员时分平台发送。两平台的 Markdown 也不保证同样显示，复杂排版应分别准备。
 
+## Windows 与 PowerShell
+
+Node/Python 主 CLI 可在原生 Windows 运行，不需要 Bash。首次创建配置的 PowerShell 命令见 [README](README.md#windows--powershell)。默认路径为 `%USERPROFILE%\.config\notify-bot\config.json`；`--config` 和 `NOTIFY_CONFIG_FILE` 的优先级与其他系统相同。Windows 使用文件 ACL；请在文件安全属性中确认真实配置没有向其他用户开放，脚本不检查或自动修改 Windows ACL。
+
+使用 `node .\scripts\notify-send.js` 或 `python .\scripts\notify-send`，也可用 `py -3 .\scripts\notify-send`（确认 Python 至少 3.10）。无需改文件扩展名，也不需要为主 CLI 新增 `.bat` 或 `.ps1`。路径包含空格时加引号。
+
+推荐 PowerShell 7。下面使用显式 UTF-8 编码写入临时正文，兼容 PowerShell 5.1/7，且只做离线预览：
+
+```powershell
+$notifyBody = Join-Path ([IO.Path]::GetTempPath()) ([IO.Path]::GetRandomFileName())
+try {
+    [IO.File]::WriteAllText($notifyBody, "第一行`r`n第二行 🙂", [Text.UTF8Encoding]::new($false))
+    node .\scripts\notify-send.js --platform wecom text --body-file $notifyBody --dry-run
+    # 或选择 Python：python .\scripts\notify-send --platform wecom text --body-file $notifyBody --dry-run
+} finally {
+    Remove-Item -LiteralPath $notifyBody
+}
+```
+
+配置、正文、卡片等 JSON 文件均使用 UTF-8，可带一个开头的 BOM；正文内部字符及 CRLF/LF 换行原样保留。UTF-16 文件不支持。Windows PowerShell 5.1 的 `>` 默认生成 UTF-16，不要用它生成输入文件；若把含中文的 PowerShell 示例保存成 `.ps1` 后在 5.1 中执行，脚本文件本身应保存为 UTF-8 with BOM。
+
+两版 CLI 的 stdout/stderr 均输出 UTF-8。AI、Python 或其他程序捕获输出时应显式按 UTF-8 解码。`--body-file -` 同样要求管道送入 UTF-8 字节；设置 Python UTF-8 模式不能修复上游 PowerShell 已破坏的文本，因此日常优先传文件。PowerShell 环境变量写法为 `$env:NOTIFY_CONFIG_FILE = 'C:\path\bots.json'`；进程退出码通过 `$LASTEXITCODE` 获取。
+
+curl `.sh` 示例仍属于 Bash 使用方式，仅在 macOS/Linux 验证；不将 Git Bash 或 WSL 的成功视为原生 Windows 验证。
+
 ## Node、Python 与 HTTP 的使用逻辑
 
 Node.js 和 Python 是两种可选的本地运行方式；HTTP 是通信协议，脚本使用其加密形式 HTTPS 调用机器人接口，不代表需要另起 HTTP 服务。另提供 curl 直接请求示例，方便手工验证接口。

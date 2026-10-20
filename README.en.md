@@ -19,7 +19,7 @@ Independent Node.js and Python clients share the same CLI and configuration form
 
 ## Requirements and installation
 
-Use Node.js 18+ **or** Python 3.10+; prefer a currently maintained runtime. The full test suite needs both. Tested on macOS and Linux; Windows is not yet verified.
+Use Node.js 18+ **or** Python 3.10+; prefer a currently maintained runtime. The Node/Python CLI supports macOS, Linux, and Windows, with CI coverage for all three. The full test suite needs both runtimes. The Bash curl examples are tested only on macOS/Linux.
 
 ```bash
 git clone --branch v0.1.0 --depth 1 https://github.com/kevinlove0712/notify-bot.git
@@ -45,6 +45,29 @@ The [skills CLI](https://github.com/vercel-labs/skills#install-a-skill) currentl
 
 For manual installation, place the complete directory in your agent's supported skills directory. Preserve the relative locations of `SKILL.md`, `scripts/`, and the documentation. The agent instructions and detailed reference are currently in Chinese.
 
+### Windows / PowerShell
+
+Windows compatibility is currently on `main`, not in `v0.1.0`. Omit `--branch v0.1.0 --depth 1` when cloning, or use the skills CLI above. If PowerShell blocks `npx.ps1`, run `npx.cmd skills add kevinlove0712/notify-bot --skill notify-bot`; no execution-policy change is needed.
+
+PowerShell 7 is recommended. Run these commands from the repository root; an existing configuration is preserved:
+
+```powershell
+$notifyDir = Join-Path $env:USERPROFILE '.config\notify-bot'
+$notifyConfig = Join-Path $notifyDir 'config.json'
+New-Item -ItemType Directory -Force -Path $notifyDir | Out-Null
+if (-not (Test-Path -LiteralPath $notifyConfig)) {
+    Copy-Item -LiteralPath '.\examples\config.example.json' -Destination $notifyConfig
+}
+node .\scripts\notify-send.js --list-targets
+node .\scripts\notify-send.js --platform wecom text 'Preview' --dry-run
+# Python alternative; choose one runtime
+python .\scripts\notify-send --platform wecom text 'Preview' --dry-run
+```
+
+If your Python installation provides the `py` launcher, use `py -3` instead of `python` and check that it selects Python 3.10+. The default configuration is `%USERPROFILE%\.config\notify-bot\config.json`. Windows uses file ACLs rather than `chmod`; keep credentials private and outside the repository.
+
+Configuration, body, and JSON files must be UTF-8; a leading BOM is accepted. UTF-16 is not supported. Both clients preserve body line endings and emit UTF-8 output, which callers must decode as UTF-8. Prefer `--body-file` for Unicode or multiline text. In Windows PowerShell 5.1, `>` writes UTF-16 and pipelines may alter Unicode text; save files with an explicit UTF-8 encoding instead. The bundled `.sh` curl examples require Bash and are not native PowerShell scripts.
+
 ## Quick start
 
 Run the following commands from the repository root.
@@ -56,7 +79,7 @@ node scripts/notify-send.js --platform feishu text "Task complete" --dry-run
 python3 scripts/notify-send --platform wecom text "Task complete" --dry-run
 ```
 
-**2. Create a private configuration.** These macOS/Linux commands preserve an existing configuration:
+**2. Create a private configuration.** On Windows, use the PowerShell steps above. These macOS/Linux commands preserve an existing configuration:
 
 ```bash
 mkdir -p "$HOME/.config/notify-bot"
